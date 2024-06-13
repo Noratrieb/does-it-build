@@ -103,8 +103,8 @@ fn main() -> Result<()> {
 
                             let output = Command::new("cargo")
                                 .arg(format!("+{toolchain}"))
-                                .args(["build", "-Zbuild-std=core", "--target"])
-                                .arg(target)
+                                .args(["build", "-Zbuild-std=core", "--release"])
+                                .args(["--target", target])
                                 .current_dir(&target_dir)
                                 .output()
                                 .wrap_err("spawning cargo build")?;
