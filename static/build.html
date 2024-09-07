@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Build</title>
+    <link rel="stylesheet" href="/index.css" />
+    <style>
+      .build-indicator-big {
+        padding: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Build results nightly-{{nightly}} target-{{target}}</h1>
+    <div class="{{status}} build-indicator-big">{{status}}</div>
+    <pre>
+{{stderr}}
+    </pre>
+  </body>
+</html>

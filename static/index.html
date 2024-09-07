@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Target state</title>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+  <body>
+    <h1>Target state</h1>
+    <!--<form id="nightly-form">
+      <h2>Force manual build</h2>
+      <label for="nightly-date-field">Nightly date</label>
+      <input id="nightly-date-field" placeholder="2024-08-05" type="text" />
+      <input type="submit" />
+    </form>-->
+    <h2>Historical target state</h2>
+    <label for="target-filter">Target Filter</label>
+    <input id="target-filter" />
+    <label for="target-filter-failed">Filter failed</label>
+    <input type="checkbox" id="target-filter-failed" />
+
+    <table id="target-state" class="target-state-table">
+      <tr>
+        <td>loading...</td>
+      </tr>
+    </table>
+    <script>
+      let data = [];
+      let filter = localStorage.getItem("filter") ?? "";
+      document.getElementById("target-filter").value = filter;
+      document.getElementById("target-filter-failed").value =
+        localStorage.getItem("filterFailed") ?? false;
+
+      const table = document.getElementById("target-state");
+
+      function fetchTargets() {
+        fetch("/target-state")
+          .then((body) => body.json())
+          .then((body) => {
+            data = body;
+            renderTable();
+          });
+      }
+
+      function renderTable() {
+        const allTargets = new Set();
+        const allNightlies = new Set();
+
+        const nightlyInfos = new Map();
+
+        // Targets that have, at some point, errored
+        const targetsWithErrors = new Set();
+
+        for (const info of data) {
+          allNightlies.add(info.nightly);
+
+          if (!info.target.includes(filter)) {
+            continue;
+          }
+
+          if (info.status === "error") {
+            targetsWithErrors.add(info.target);
+          }
+
+          allTargets.add(info.target);
+          if (!nightlyInfos.has(info.nightly)) {
+            nightlyInfos.set(info.nightly, new Map());
+          }
+          nightlyInfos.get(info.nightly).set(info.target, info);
+        }
+
+        const nightlies = Array.from(allNightlies);
+        nightlies.sort();
+        nightlies.reverse();
+        const targets = Array.from(allTargets);
+        targets.sort();
+
+        const header = document.createElement("tr");
+        const headerNightly = document.createElement("th");
+        headerNightly.innerText = "nightly";
+        header.appendChild(headerNightly);
+        const targetHeaders = targets.forEach((target) => {
+          if (
+            document.getElementById("target-filter-failed").checked &&
+            !targetsWithErrors.has(target)
+          ) {
+            return;
+          }
+          const elem = document.createElement("th");
+          elem.innerText = target;
+          header.appendChild(elem);
+        });
+
+        const rows = nightlies.map((nightly) => {
+          const tr = document.createElement("tr");
+
+          const nightlyCol = document.createElement("td");
+          nightlyCol.innerText = nightly;
+          tr.appendChild(nightlyCol);
+
+          const info = nightlyInfos.get(nightly) ?? new Map();
+
+          for (const target of targets) {
+            if (
+              document.getElementById("target-filter-failed").checked &&
+              !targetsWithErrors.has(target)
+            ) {
+              continue;
+            }
+
+            const td = document.createElement("td");
+            const targetInfo = info.get(target);
+
+            if (targetInfo) {
+              const a = document.createElement("a");
+              a.classList.add("build-info-a");
+              a.href = `/build?nightly=${encodeURIComponent(
+                nightly
+              )}&target=${encodeURIComponent(target)}`;
+              a.innerText = targetInfo.status;
+              td.appendChild(a);
+              td.classList.add(targetInfo.status);
+            } else {
+              td.innerText = "";
+              td.classList.add("missing");
+            }
+            tr.appendChild(td);
+          }
+
+          return tr;
+        });
+        table.replaceChildren(header, ...rows);
+      }
+
+      //function onTriggerBuild(e) {
+      //  e.preventDefault();
+      //
+      //  const date = document.getElementById("nightly-date-field").value;
+      //  if (!date) {
+      //    return;
+      //  }
+      //
+      //  fetch("/trigger-build", {
+      //    method: "POST",
+      //    body: JSON.stringify({
+      //      nightly: date,
+      //    }),
+      //    headers: {
+      //      "Content-Type": "application/json",
+      //    },
+      //  }).then(() =>
+      //    alert(`triggered build for ${date}, this may take a few minutes`)
+      //  );
+      //}
+
+      function onFilterChange(e) {
+        filter = e.target.value;
+        localStorage.setItem("filter", filter);
+        console.log(filter);
+
+        renderTable();
+      }
+
+      //document
+      //  .getElementById("nightly-form")
+      //  .addEventListener("submit", onTriggerBuild);
+      document
+        .getElementById("target-filter")
+        .addEventListener("input", onFilterChange);
+      document
+        .getElementById("target-filter-failed")
+        .addEventListener("input", renderTable);
+
+      // Initial fetch
+      fetchTargets();
+    </script>
+  </body>
+</html>

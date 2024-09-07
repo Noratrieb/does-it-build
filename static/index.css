@@ -1,0 +1,26 @@
+html {
+  font-family: sans-serif;
+}
+
+th,
+td {
+  border: 1px solid;
+  margin: 0;
+}
+
+.error {
+  background-color: lightcoral;
+}
+
+.pass {
+  background-color: greenyellow;
+}
+
+.missing {
+  background-color: lightgray;
+}
+
+.build-info-a {
+  color: black;
+  text-decoration: none;
+}
