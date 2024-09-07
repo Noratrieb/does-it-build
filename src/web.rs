@@ -25,14 +25,14 @@ pub async fn webserver(db: Db) -> Result<()> {
         .route("/trigger-build", post(trigger_build))
         .with_state(AppState { db });
 
-    info!("Serving website on port 3000");
+    info!("Serving website on port 3000 (commit {})", crate::VERSION);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.wrap_err("failed to serve")
 }
 
 async fn root() -> impl IntoResponse {
-    Html(include_str!("../static/index.html"))
+    Html(include_str!("../static/index.html").replace("{{version}}", crate::VERSION))
 }
 
 #[derive(Deserialize)]
@@ -52,6 +52,7 @@ async fn build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -
                 .replace("{{nightly}}", &query.nightly)
                 .replace("{{target}}", &query.target)
                 .replace("{{stderr}}", &build.stderr)
+                .replace("{{version}}", crate::VERSION)
                 .replace("{{status}}", &build.status.to_string());
 
             Html(page).into_response()

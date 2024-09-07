@@ -6,6 +6,8 @@ mod web;
 use color_eyre::{eyre::WrapErr, Result};
 use db::Db;
 
+const VERSION: &str = env!("GIT_COMMIT");
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().init();

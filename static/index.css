@@ -24,3 +24,10 @@ td {
   color: black;
   text-decoration: none;
 }
+
+.footer {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
