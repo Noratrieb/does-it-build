@@ -11,3 +11,7 @@ It does this in parallel, using half of the available threads.
 ## Configuration
 
 - `DB_PATH`: Path to SQlite DB to store the results
+
+## Deployment
+
+deployed at <https://does-it-build.noratrieb.dev/>
