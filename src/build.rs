@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Display},
-    num::NonZero,
+    num::NonZeroUsize,
     path::Path,
     time::Duration,
 };
@@ -146,7 +146,7 @@ pub async fn build_every_target_for_toolchain(db: &Db, nightly: &str) -> Result<
         .wrap_err("failed to get targets")?;
 
     let concurrent = std::thread::available_parallelism()
-        .unwrap_or(NonZero::new(2).unwrap())
+        .unwrap_or(NonZeroUsize::new(2).unwrap())
         .get()
         / 2;
 
