@@ -12,8 +12,11 @@
     </style>
   </head>
   <body>
-    <h1>Build results nightly-{{nightly}} target-{{target}}</h1>
-    <div class="{{status}} build-indicator-big">{{status}}</div>
+    <h1>Build results for nightly-{{nightly}} target-{{target}} {{mode}}</h1>
+    <a href="/">Back</a>
+    <div style="margin-top: 20px" class="{{status}} build-indicator-big">
+      {{status}}
+    </div>
     <pre>
 {{stderr}}
     </pre>

@@ -54,6 +54,7 @@ async fn build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -
                 .replace("{{nightly}}", &query.nightly)
                 .replace("{{target}}", &query.target)
                 .replace("{{stderr}}", &build.stderr)
+                .replace("{{mode}}", &build.mode.to_string())
                 .replace("{{version}}", crate::VERSION)
                 .replace("{{status}}", &build.status.to_string());
 

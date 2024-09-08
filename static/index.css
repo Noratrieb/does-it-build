@@ -20,9 +20,22 @@ td {
   background-color: lightgray;
 }
 
+.target-header {
+  writing-mode: sideways-lr;
+}
+
 .build-info-a {
   color: black;
   text-decoration: none;
+}
+
+.build-cell {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.target-name-col {
+  white-space: nowrap;
 }
 
 .footer {

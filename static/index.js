@@ -28,7 +28,8 @@ class Table {
     const allTargets = new Set();
     const allNightlies = new Set();
 
-    const nightlyInfos = new Map();
+    // The infos grouped by target.
+    const targetInfos = new Map();
 
     // Targets that have, at some point, errored
     const targetsWithErrors = new Set();
@@ -62,10 +63,10 @@ class Table {
       }
 
       allTargets.add(info.target);
-      if (!nightlyInfos.has(info.nightly)) {
-        nightlyInfos.set(info.nightly, new Map());
+      if (!targetInfos.has(info.target)) {
+        targetInfos.set(info.target, new Map());
       }
-      nightlyInfos.get(info.nightly).set(info.target, info);
+      targetInfos.get(info.target).set(info.nightly, info);
     }
 
     const nightlies = Array.from(allNightlies);
@@ -75,34 +76,33 @@ class Table {
     targets.sort();
 
     const header = document.createElement("tr");
-    const headerNightly = document.createElement("th");
-    headerNightly.innerText = "nightly";
-    header.appendChild(headerNightly);
-    targets.forEach((target) => {
-      if (this.filter.filterFailed && !targetsWithErrors.has(target)) {
-        return;
-      }
+    const headerTarget = document.createElement("th");
+    headerTarget.innerText = "target";
+    header.appendChild(headerTarget);
+    nightlies.forEach((target) => {
       const elem = document.createElement("th");
+      elem.classList.add("target-header");
       elem.innerText = target;
       header.appendChild(elem);
     });
 
-    const rows = nightlies.map((nightly) => {
+    const rows = targets.flatMap((target) => {
+      if (this.filter.filterFailed && !targetsWithErrors.has(target)) {
+        return [];
+      }
+
       const tr = document.createElement("tr");
 
-      const nightlyCol = document.createElement("td");
-      nightlyCol.innerText = nightly;
-      tr.appendChild(nightlyCol);
+      const targetCol = document.createElement("td");
+      targetCol.innerText = target;
+      targetCol.classList.add("target-name-col");
+      tr.appendChild(targetCol);
 
-      const info = nightlyInfos.get(nightly) ?? new Map();
+      const info = targetInfos.get(target) ?? new Map();
 
-      for (const target of targets) {
-        if (this.filter.filterFailed && !targetsWithErrors.has(target)) {
-          continue;
-        }
-
+      for (const nightly of nightlies) {
         const td = document.createElement("td");
-        const targetInfo = info.get(target);
+        const targetInfo = info.get(nightly);
 
         if (targetInfo) {
           const a = document.createElement("a");
@@ -112,8 +112,9 @@ class Table {
           )}&target=${encodeURIComponent(target)}&mode=${encodeURIComponent(
             targetInfo.mode
           )}`;
-          a.innerText = targetInfo.status;
+          a.innerText = targetInfo.status == "pass" ? "✅" : "❌";
           td.appendChild(a);
+          td.classList.add("build-cell");
           td.classList.add(targetInfo.status);
         } else {
           td.innerText = "";
@@ -122,7 +123,7 @@ class Table {
         tr.appendChild(td);
       }
 
-      return tr;
+      return [tr];
     });
     this.elem.replaceChildren(header, ...rows);
   }

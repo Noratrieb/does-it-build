@@ -8,8 +8,13 @@
   </head>
   <body>
     <h1>Does it build?</h1>
+    <p>This website builds every rustc target on many nightlies to check which ones work and which ones do not.</p>
+    <ul>
+      <li><a href="#core-build">Core build</a></li>
+      <li><a href="#miri-std-build">Std check build</a></li>
+    </ul>
     <!--core-->
-    <h2>Core Build</h2>
+    <h2 id="core-build">Core Build</h2>
     <p>Builds every target with:
     <pre>cargo build --release -Zbuild-std=core</pre></p>
     <p>This checks that codegen/linking of core works, but does not check whether std builds.</p>
@@ -25,7 +30,7 @@
     </table>
 
     <!--std-->
-    <h2>Miri Std Build</h2>
+    <h2 id="miri-std-build">Miri Std Build</h2>
     <p>Builds every target with:
     <pre>cargo miri setup</pre></p>
     <p>This checks that std builds (on targets that have it) but does not check whether codegen/linking works.</p>
