@@ -162,4 +162,14 @@ impl Db {
             .wrap_err("inserting finished nightly")?;
         Ok(())
     }
+
+    pub async fn finish_nightly_as_broken(&self, nightly: &str, mode: BuildMode) -> Result<()> {
+        sqlx::query("INSERT INTO finished_nightly (nightly, mode, is_broken) VALUES (?, ?, TRUE)")
+            .bind(nightly)
+            .bind(mode)
+            .execute(&self.conn)
+            .await
+            .wrap_err("inserting finished broken nightly")?;
+        Ok(())
+    }
 }

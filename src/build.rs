@@ -11,7 +11,7 @@ use color_eyre::{
 };
 use futures::StreamExt;
 use tokio::process::Command;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::{
     db::{BuildMode, Db, FullBuildInfo, Status},
@@ -38,7 +38,9 @@ impl Display for Toolchain {
 pub async fn background_builder(db: Db) -> Result<()> {
     let mut nightly_cache = NightlyCache::default();
     loop {
-        let nightlies = Nightlies::fetch(&mut nightly_cache).await.wrap_err("fetching nightlies")?;
+        let nightlies = Nightlies::fetch(&mut nightly_cache)
+            .await
+            .wrap_err("fetching nightlies")?;
         let already_finished = db
             .finished_nightlies()
             .await
@@ -48,9 +50,15 @@ pub async fn background_builder(db: Db) -> Result<()> {
         match next {
             Some((nightly, mode)) => {
                 info!(%nightly, %mode, "Building next nightly");
-                build_every_target_for_toolchain(&db, &nightly, mode)
+                let result = build_every_target_for_toolchain(&db, &nightly, mode)
                     .await
-                    .wrap_err_with(|| format!("building targets for toolchain {nightly}"))?;
+                    .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
+                if let Err(err) = result {
+                    error!(%nightly, %mode, ?err, "Failed to build nightly");
+                    db.finish_nightly_as_broken(&nightly, mode)
+                        .await
+                        .wrap_err("marking nightly as broken")?;
+                }
             }
             None => {
                 info!("No new nightly, waiting for an hour to try again");
