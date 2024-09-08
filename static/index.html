@@ -19,7 +19,7 @@
     <pre>cargo build --release -Zbuild-std=core</pre></p>
     <p>This checks that codegen/linking of core works, but does not check whether std builds.</p>
     <label for="target-filter">Target Filter</label>
-    <input id="target-filter" />
+    <input id="target-filter" type="search" />
     <label for="target-filter-failed">Filter failed</label>
     <input type="checkbox" id="target-filter-failed" />
 
@@ -35,7 +35,7 @@
     <pre>cargo miri setup</pre></p>
     <p>This checks that std builds (on targets that have it) but does not check whether codegen/linking works.</p>
     <label for="target-filter-miri">Target Filter</label>
-    <input id="target-filter-miri" />
+    <input id="target-filter-miri" type="search" />
     <label for="target-filter-failed-miri">Filter failed</label>
     <input type="checkbox" id="target-filter-failed-miri" />
 
