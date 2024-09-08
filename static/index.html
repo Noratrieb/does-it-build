@@ -11,7 +11,7 @@
     <p>This website builds every rustc target on many nightlies to check which ones work and which ones do not.</p>
     <ul>
       <li><a href="#core-build">Core build</a></li>
-      <li><a href="#miri-std-build">Std check build</a></li>
+      <li><a href="#std-check-build">Std check build</a></li>
     </ul>
     <!--core-->
     <h2 id="core-build">Core Build</h2>
@@ -30,7 +30,7 @@
     </table>
 
     <!--std-->
-    <h2 id="miri-std-build">Miri Std Build</h2>
+    <h2 id="std-check-build">Std Check Build</h2>
     <p>Builds every target with:
     <pre>cargo miri setup</pre></p>
     <p>This checks that std builds (on targets that have it) but does not check whether codegen/linking works.</p>
