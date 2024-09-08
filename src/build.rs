@@ -14,7 +14,7 @@ use tokio::process::Command;
 use tracing::{debug, info};
 
 use crate::{
-    db::{Db, FullBuildInfo, Status},
+    db::{BuildMode, Db, FullBuildInfo, Status},
     nightlies::Nightlies,
 };
 
@@ -45,9 +45,9 @@ pub async fn background_builder(db: Db) -> Result<()> {
 
         let next = nightlies.select_latest_to_build(&already_finished);
         match next {
-            Some(nightly) => {
-                info!(%nightly, "Building next nightly");
-                build_every_target_for_toolchain(&db, &nightly)
+            Some((nightly, mode)) => {
+                info!(%nightly, %mode, "Building next nightly");
+                build_every_target_for_toolchain(&db, &nightly, mode)
                     .await
                     .wrap_err_with(|| format!("building targets for toolchain {nightly}"))?;
             }
@@ -82,7 +82,7 @@ async fn targets_for_toolchain(toolchain: &Toolchain) -> Result<Vec<String>> {
 }
 
 #[tracing::instrument]
-async fn install_toolchain(toolchain: &Toolchain) -> Result<()> {
+async fn install_toolchain(toolchain: &Toolchain, mode: BuildMode) -> Result<()> {
     info!(%toolchain, "Installing toolchain");
 
     let result = Command::new("rustup")
@@ -109,6 +109,20 @@ async fn install_toolchain(toolchain: &Toolchain) -> Result<()> {
     if !result.status.success() {
         bail!("rustup failed: {:?}", String::from_utf8(result.stderr));
     }
+    if mode == BuildMode::MiriStd {
+        let result = Command::new("rustup")
+            .arg("component")
+            .arg("add")
+            .arg("miri")
+            .arg("--toolchain")
+            .arg(&toolchain.0)
+            .output()
+            .await
+            .wrap_err("failed to spawn rustup")?;
+        if !result.status.success() {
+            bail!("rustup failed: {:?}", String::from_utf8(result.stderr));
+        }
+    }
     Ok(())
 }
 
@@ -132,14 +146,18 @@ async fn uninstall_toolchain(toolchain: &Toolchain) -> Result<()> {
     Ok(())
 }
 
-pub async fn build_every_target_for_toolchain(db: &Db, nightly: &str) -> Result<()> {
-    if db.is_nightly_finished(nightly).await? {
+pub async fn build_every_target_for_toolchain(
+    db: &Db,
+    nightly: &str,
+    mode: BuildMode,
+) -> Result<()> {
+    if db.is_nightly_finished(nightly, mode).await? {
         debug!("Nightly is already finished, not trying again");
         return Ok(());
     }
 
     let toolchain = Toolchain::from_nightly(nightly);
-    install_toolchain(&toolchain).await?;
+    install_toolchain(&toolchain, mode).await?;
 
     let targets = targets_for_toolchain(&toolchain)
         .await
@@ -153,7 +171,7 @@ pub async fn build_every_target_for_toolchain(db: &Db, nightly: &str) -> Result<
     let results = futures::stream::iter(
         targets
             .iter()
-            .map(|target| build_single_target(&db, nightly, target)),
+            .map(|target| build_single_target(&db, nightly, target, mode)),
     )
     .buffer_unordered(concurrent)
     .collect::<Vec<Result<()>>>()
@@ -163,13 +181,13 @@ pub async fn build_every_target_for_toolchain(db: &Db, nightly: &str) -> Result<
     }
 
     for target in targets {
-        build_single_target(db, nightly, &target)
+        build_single_target(db, nightly, &target, mode)
             .await
             .wrap_err_with(|| format!("building target {target} for toolchain {toolchain}"))?;
     }
 
     // Mark it as finished, so we never have to build it again.
-    db.finish_nightly(nightly).await?;
+    db.finish_nightly(nightly, mode).await?;
 
     uninstall_toolchain(&toolchain).await?;
 
@@ -177,9 +195,9 @@ pub async fn build_every_target_for_toolchain(db: &Db, nightly: &str) -> Result<
 }
 
 #[tracing::instrument(skip(db))]
-async fn build_single_target(db: &Db, nightly: &str, target: &str) -> Result<()> {
+async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMode) -> Result<()> {
     let existing = db
-        .build_status_full(nightly, target)
+        .build_status_full(nightly, target, mode)
         .await
         .wrap_err("getting existing build")?;
     if existing.is_some() {
@@ -191,15 +209,21 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str) -> Result<()>
 
     let tmpdir = tempfile::tempdir().wrap_err("creating temporary directory")?;
 
-    let result = build_target(tmpdir.path(), &Toolchain::from_nightly(nightly), target)
-        .await
-        .wrap_err("running build")?;
+    let result = build_target(
+        tmpdir.path(),
+        &Toolchain::from_nightly(nightly),
+        target,
+        mode,
+    )
+    .await
+    .wrap_err("running build")?;
 
     db.insert(FullBuildInfo {
         nightly: nightly.into(),
         target: target.into(),
         status: result.status,
         stderr: result.stderr,
+        mode,
     })
     .await?;
 
@@ -212,31 +236,47 @@ struct BuildResult {
 }
 
 /// Build a target core in a temporary directory and see whether it passes or not.
-async fn build_target(tmpdir: &Path, toolchain: &Toolchain, target: &str) -> Result<BuildResult> {
-    std::fs::create_dir_all(&tmpdir).wrap_err("creating target src dir")?;
+async fn build_target(
+    tmpdir: &Path,
+    toolchain: &Toolchain,
+    target: &str,
+    mode: BuildMode,
+) -> Result<BuildResult> {
+    let output = match mode {
+        BuildMode::Core => {
+            let init = Command::new("cargo")
+                .args(["init", "--lib", "--name", "target-test"])
+                .current_dir(&tmpdir)
+                .output()
+                .await
+                .wrap_err("spawning cargo init")?;
+            if !init.status.success() {
+                bail!("init failed: {}", String::from_utf8(init.stderr)?);
+            }
 
-    let init = Command::new("cargo")
-        .args(["init", "--lib", "--name", "target-test"])
-        .current_dir(&tmpdir)
-        .output()
-        .await
-        .wrap_err("spawning cargo init")?;
-    if !init.status.success() {
-        bail!("init failed: {}", String::from_utf8(init.stderr)?);
-    }
+            let librs = tmpdir.join("src").join("lib.rs");
+            std::fs::write(&librs, "#![no_std]\n")
+                .wrap_err_with(|| format!("writing to {}", librs.display()))?;
 
-    let librs = tmpdir.join("src").join("lib.rs");
-    std::fs::write(&librs, "#![no_std]\n")
-        .wrap_err_with(|| format!("writing to {}", librs.display()))?;
-
-    let output = Command::new("cargo")
-        .arg(format!("+{toolchain}"))
-        .args(["build", "-Zbuild-std=core", "--release"])
-        .args(["--target", target])
-        .current_dir(&tmpdir)
-        .output()
-        .await
-        .wrap_err("spawning cargo build")?;
+            Command::new("cargo")
+                .arg(format!("+{toolchain}"))
+                .args(["build", "-Zbuild-std=core", "--release"])
+                .args(["--target", target])
+                .current_dir(&tmpdir)
+                .output()
+                .await
+                .wrap_err("spawning cargo build")?
+        }
+        BuildMode::MiriStd => Command::new("cargo")
+            .arg(format!("+{toolchain}"))
+            .args(["miri", "setup"])
+            .args(["--target", target])
+            .current_dir(&tmpdir)
+            .env("MIRI_SYSROOT", tmpdir)
+            .output()
+            .await
+            .wrap_err("spawning cargo build")?,
+    };
 
     let stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
 

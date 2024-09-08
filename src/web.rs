@@ -9,7 +9,7 @@ use color_eyre::{eyre::Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use crate::db::Db;
+use crate::db::{BuildMode, Db};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -21,6 +21,7 @@ pub async fn webserver(db: Db) -> Result<()> {
         .route("/", get(root))
         .route("/build", get(build))
         .route("/index.css", get(index_css))
+        .route("/index.js", get(index_js))
         .route("/target-state", get(target_state))
         .route("/trigger-build", post(trigger_build))
         .with_state(AppState { db });
@@ -31,20 +32,21 @@ pub async fn webserver(db: Db) -> Result<()> {
     axum::serve(listener, app).await.wrap_err("failed to serve")
 }
 
-async fn root() -> impl IntoResponse {
-    Html(include_str!("../static/index.html").replace("{{version}}", crate::VERSION))
-}
-
 #[derive(Deserialize)]
 struct BuildQuery {
     nightly: String,
     target: String,
+    mode: Option<BuildMode>,
 }
 
 async fn build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -> Response {
     match state
         .db
-        .build_status_full(&query.nightly, &query.target)
+        .build_status_full(
+            &query.nightly,
+            &query.target,
+            query.mode.unwrap_or(BuildMode::Core),
+        )
         .await
     {
         Ok(Some(build)) => {
@@ -65,6 +67,9 @@ async fn build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -
     }
 }
 
+async fn root() -> impl IntoResponse {
+    Html(include_str!("../static/index.html").replace("{{version}}", crate::VERSION))
+}
 async fn index_css() -> impl IntoResponse {
     (
         [(
@@ -72,6 +77,15 @@ async fn index_css() -> impl IntoResponse {
             axum::http::HeaderValue::from_static("text/css; charset=utf-8"),
         )],
         include_str!("../static/index.css"),
+    )
+}
+async fn index_js() -> impl IntoResponse {
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("text/javascript"),
+        )],
+        include_str!("../static/index.js"),
     )
 }
 

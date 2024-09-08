@@ -1,6 +1,9 @@
 use std::{fmt::Display, str::FromStr};
 
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{
+    eyre::{bail, Context},
+    Result,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::{migrate::Migrator, sqlite::SqliteConnectOptions, Pool, Sqlite};
 
@@ -11,11 +14,31 @@ pub struct Db {
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
+#[derive(Debug, Clone, Copy, sqlx::Type, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[sqlx(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
+pub enum BuildMode {
+    /// `-Zbuild-std=core`
+    Core,
+    /// `cargo miri setup`
+    MiriStd,
+}
+
+impl Display for BuildMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Core => f.write_str("core"),
+            Self::MiriStd => f.write_str("miri-std"),
+        }
+    }
+}
+
 #[derive(sqlx::FromRow, Serialize, Deserialize)]
 pub struct BuildInfo {
     pub nightly: String,
     pub target: String,
     pub status: Status,
+    pub mode: BuildMode,
 }
 
 #[derive(Clone, sqlx::FromRow, Serialize, Deserialize)]
@@ -24,6 +47,7 @@ pub struct FullBuildInfo {
     pub target: String,
     pub status: Status,
     pub stderr: String,
+    pub mode: BuildMode,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, sqlx::Type, Serialize, Deserialize)]
@@ -43,9 +67,10 @@ impl Display for Status {
     }
 }
 
-#[derive(sqlx::FromRow)]
-struct FinishedNightly {
-    nightly: String,
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Hash)]
+pub struct FinishedNightly {
+    pub nightly: String,
+    pub mode: BuildMode,
 }
 
 impl Db {
@@ -62,12 +87,13 @@ impl Db {
 
     pub async fn insert(&self, info: FullBuildInfo) -> Result<()> {
         sqlx::query(
-            "INSERT INTO build_info (nightly, target, status, stderr) VALUES (?, ?, ?, ?);",
+            "INSERT INTO build_info (nightly, target, status, stderr, mode) VALUES (?, ?, ?, ?, ?);",
         )
         .bind(info.nightly)
         .bind(info.target)
         .bind(info.status)
         .bind(info.stderr)
+        .bind(info.mode)
         .execute(&self.conn)
         .await
         .wrap_err("inserting build info into database")?;
@@ -75,7 +101,7 @@ impl Db {
     }
 
     pub async fn build_status(&self) -> Result<Vec<BuildInfo>> {
-        sqlx::query_as::<_, BuildInfo>("SELECT nightly, target, status FROM build_info")
+        sqlx::query_as::<_, BuildInfo>("SELECT nightly, target, status, mode FROM build_info")
             .fetch_all(&self.conn)
             .await
             .wrap_err("getting build status from DB")
@@ -85,43 +111,52 @@ impl Db {
         &self,
         nightly: &str,
         target: &str,
+        mode: BuildMode,
     ) -> Result<Option<FullBuildInfo>> {
         let result = sqlx::query_as::<_, FullBuildInfo>(
-            "SELECT nightly, target, status, stderr FROM build_info
-            WHERE nightly = ? AND target = ?",
+            "SELECT nightly, target, status, stderr, mode FROM build_info
+            WHERE nightly = ? AND target = ? AND mode = ?",
         )
         .bind(nightly)
         .bind(target)
+        .bind(mode)
         .fetch_all(&self.conn)
         .await
         .wrap_err("getting build status from DB")?;
         Ok(result.first().cloned())
     }
 
-    pub async fn finished_nightlies(&self) -> Result<Vec<String>> {
-        let result = sqlx::query_as::<_, FinishedNightly>("SELECT nightly from finished_nightly")
-            .fetch_all(&self.conn)
-            .await
-            .wrap_err("fetching fnished nightlies")?;
+    pub async fn finished_nightlies(&self) -> Result<Vec<FinishedNightly>> {
+        let result =
+            sqlx::query_as::<_, FinishedNightly>("SELECT nightly, mode from finished_nightly")
+                .fetch_all(&self.conn)
+                .await
+                .wrap_err("fetching finished nightlies")?;
 
-        Ok(result.into_iter().map(|nightly| nightly.nightly).collect())
+        Ok(result)
     }
 
-    pub async fn is_nightly_finished(&self, nightly: &str) -> Result<bool> {
+    pub async fn is_nightly_finished(&self, nightly: &str, mode: BuildMode) -> Result<bool> {
         let result = sqlx::query_as::<_, FinishedNightly>(
-            "SELECT nightly from finished_nightly WHERE nightly = ?",
+            "SELECT nightly, mode from finished_nightly WHERE nightly = ? AND mode = ?",
         )
         .bind(nightly)
+        .bind(mode)
         .fetch_all(&self.conn)
         .await
-        .wrap_err("fetching fnished nightlies")?;
+        .wrap_err("checking whether a nightly is finished")?;
+
+        if result.len() > 1 {
+            bail!("found more than one result for {nightly} {mode}");
+        }
 
         Ok(result.len() == 1)
     }
 
-    pub async fn finish_nightly(&self, nightly: &str) -> Result<()> {
-        sqlx::query("INSERT INTO finished_nightly (nightly) VALUES (?)")
+    pub async fn finish_nightly(&self, nightly: &str, mode: BuildMode) -> Result<()> {
+        sqlx::query("INSERT INTO finished_nightly (nightly, mode) VALUES (?, ?)")
             .bind(nightly)
+            .bind(mode)
             .execute(&self.conn)
             .await
             .wrap_err("inserting finished nightly")?;

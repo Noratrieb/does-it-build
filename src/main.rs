@@ -5,12 +5,15 @@ mod web;
 
 use color_eyre::{eyre::WrapErr, Result};
 use db::Db;
+use tracing_subscriber::EnvFilter;
 
 const VERSION: &str = env!("GIT_COMMIT");
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new("info")))
+        .init();
 
     let db = Db::open(&std::env::var("DB_PATH").unwrap_or("db.sqlite".into())).await?;
     db::MIGRATOR

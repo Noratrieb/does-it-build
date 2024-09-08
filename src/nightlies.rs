@@ -5,6 +5,8 @@ use color_eyre::eyre::Context;
 use color_eyre::Result;
 use tracing::debug;
 
+use crate::db::{BuildMode, FinishedNightly};
+
 const EARLIEST_CUTOFF_DATE: &str = "2023-01-01";
 
 /// All nightlies that exist.
@@ -29,13 +31,22 @@ impl Nightlies {
         Ok(Self { all })
     }
 
-    pub fn select_latest_to_build(&self, already_finished: &[String]) -> Option<String> {
+    pub fn select_latest_to_build(
+        &self,
+        already_finished: &[FinishedNightly],
+    ) -> Option<(String, BuildMode)> {
         let already_finished = HashSet::<_, RandomState>::from_iter(already_finished.iter());
 
         self.all
             .iter()
-            .find(|nightly| !already_finished.contains(nightly))
-            .cloned()
+            .flat_map(|nightly| [(nightly, BuildMode::Core), (nightly, BuildMode::MiriStd)])
+            .find(|(nightly, mode)| {
+                !already_finished.contains(&FinishedNightly {
+                    nightly: (*nightly).to_owned(),
+                    mode: *mode,
+                })
+            })
+            .map(|(nightly, mode)| (nightly.clone(), mode))
     }
 }
 
