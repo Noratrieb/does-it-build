@@ -172,10 +172,14 @@ pub async fn build_every_target_for_toolchain(
         .await
         .wrap_err("failed to get targets")?;
 
-    let concurrent = std::thread::available_parallelism()
-        .unwrap_or(NonZeroUsize::new(2).unwrap())
-        .get()
-        / 2;
+    let concurrent = std::env::var("DOES_IT_BUILD_PARALLEL_JOBS")
+        .map(|jobs| jobs.parse().unwrap())
+        .unwrap_or_else(|_| {
+            std::thread::available_parallelism()
+                .unwrap_or(NonZeroUsize::new(2).unwrap())
+                .get()
+                / 2
+        });
 
     let results = futures::stream::iter(
         targets
