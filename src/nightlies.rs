@@ -62,6 +62,7 @@ impl Nightlies {
         &self,
         already_finished: &[FinishedNightly],
     ) -> Option<(String, BuildMode)> {
+        dbg!(&self.all[..20]);
         let already_finished = HashSet::<_, RandomState>::from_iter(already_finished.iter());
 
         self.all

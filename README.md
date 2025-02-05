@@ -13,6 +13,8 @@ It does this in parallel, using half of the available threads (or `DOES_IT_BUILD
 - `DB_PATH`: Path to SQlite DB to store the results
 - `DOES_IT_BUILD_PARALLEL_JOBS`: Parallel build jobs, defaults to cores/2.
 
+Build configuration: `DOES_IT_BUILD_OVERRIDE_VERSION` to override the git commit.
+
 ## Deployment
 
 deployed at <https://does-it-build.noratrieb.dev/>

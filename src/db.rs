@@ -100,11 +100,34 @@ impl Db {
         Ok(())
     }
 
-    pub async fn build_status(&self) -> Result<Vec<BuildInfo>> {
+    pub async fn full_mega_monster(&self) -> Result<Vec<BuildInfo>> {
         sqlx::query_as::<_, BuildInfo>("SELECT nightly, target, status, mode FROM build_info")
             .fetch_all(&self.conn)
             .await
             .wrap_err("getting build status from DB")
+    }
+
+    pub async fn history_for_target(&self, target: &str) -> Result<Vec<BuildInfo>> {
+        sqlx::query_as::<_, BuildInfo>(
+            "SELECT nightly, target, status, mode FROM build_info WHERE target = ?",
+        )
+        .bind(target)
+        .fetch_all(&self.conn)
+        .await
+        .wrap_err("getting history for single target")
+    }
+
+    pub async fn target_list(&self) -> Result<Vec<String>> {
+        #[derive(sqlx::FromRow)]
+        struct TargetName {
+            target: String,
+        }
+
+        sqlx::query_as::<_, TargetName>("SELECT DISTINCT target FROM build_info ORDER BY target")
+            .fetch_all(&self.conn)
+            .await
+            .wrap_err("getting list of all targets")
+            .map(|elems| elems.into_iter().map(|elem| elem.target).collect())
     }
 
     pub async fn build_status_full(

@@ -1,3 +1,5 @@
+use std::{cmp::Reverse, collections::HashMap};
+
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -9,7 +11,7 @@ use color_eyre::{eyre::Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use crate::db::{BuildMode, Db};
+use crate::db::{BuildInfo, BuildMode, Db, Status};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -18,11 +20,13 @@ pub struct AppState {
 
 pub async fn webserver(db: Db) -> Result<()> {
     let app = Router::new()
-        .route("/", get(root))
-        .route("/build", get(build))
+        .route("/", get(web_root))
+        .route("/build", get(web_build))
+        .route("/target", get(web_target))
+        .route("/full-table", get(web_full_table))
         .route("/index.css", get(index_css))
         .route("/index.js", get(index_js))
-        .route("/target-state", get(target_state))
+        .route("/full-mega-monster", get(full_mega_monster))
         .route("/trigger-build", post(trigger_build))
         .with_state(AppState { db });
 
@@ -39,7 +43,7 @@ struct BuildQuery {
     mode: Option<BuildMode>,
 }
 
-async fn build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -> Response {
+async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -> Response {
     match state
         .db
         .build_status_full(
@@ -68,8 +72,105 @@ async fn build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -
     }
 }
 
-async fn root() -> impl IntoResponse {
-    Html(include_str!("../static/index.html").replace("{{version}}", crate::VERSION))
+#[derive(Deserialize)]
+struct TargetQuery {
+    target: String,
+}
+
+async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQuery>) -> Response {
+    use askama::Template;
+    #[derive(askama::Template)]
+    #[template(path = "target.html")]
+    struct TargetPage {
+        target: String,
+        status: String,
+        version: &'static str,
+        builds: Vec<(String, Option<BuildInfo>, Option<BuildInfo>)>,
+    }
+
+    match state.db.history_for_target(&query.target).await {
+        Ok(builds) => {
+            let latest_core = builds
+                .iter()
+                .filter(|build| build.mode == BuildMode::Core)
+                .max_by_key(|elem| elem.nightly.clone());
+            let latest_miri = builds
+                .iter()
+                .filter(|build| build.mode == BuildMode::Core)
+                .max_by_key(|elem| elem.nightly.clone());
+
+            let status = match (latest_core, latest_miri) {
+                (Some(core), Some(miri)) => {
+                    if core.status == Status::Error || miri.status == Status::Error {
+                        Status::Error
+                    } else {
+                        Status::Pass
+                    }
+                    .to_string()
+                }
+                (Some(one), None) | (None, Some(one)) => one.status.to_string(),
+                (None, None) => "missing".to_owned(),
+            };
+
+            let mut builds_grouped =
+                HashMap::<String, (Option<BuildInfo>, Option<BuildInfo>)>::new();
+            for build in builds {
+                let v = builds_grouped.entry(build.nightly.clone()).or_default();
+                match build.mode {
+                    BuildMode::Core => v.0 = Some(build),
+                    BuildMode::MiriStd => v.1 = Some(build),
+                }
+            }
+
+            let mut builds = builds_grouped
+                .into_iter()
+                .map(|(k, (v1, v2))| (k, v1, v2))
+                .collect::<Vec<_>>();
+            builds.sort_by_cached_key(|build| Reverse(build.0.clone()));
+
+            let page = TargetPage {
+                status,
+                target: query.target,
+                version: crate::VERSION,
+                builds,
+            };
+
+            Html(page.render().unwrap()).into_response()
+        }
+        Err(err) => {
+            error!(?err, "Error loading target state");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
+    use askama::Template;
+    #[derive(askama::Template)]
+    #[template(path = "index.html")]
+    struct RootPage {
+        targets: Vec<String>,
+        version: &'static str,
+    }
+
+    match state.db.target_list().await {
+        Ok(targets) => {
+            let page = RootPage {
+                targets,
+                version: crate::VERSION,
+            };
+
+            Html(page.render().unwrap()).into_response()
+        }
+        Err(err) => {
+            error!(?err, "Error loading target state");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+async fn web_full_table() -> impl IntoResponse {
+    Html(include_str!("../static/full-table.html").replace("{{version}}", crate::VERSION))
 }
 async fn index_css() -> impl IntoResponse {
     (
@@ -90,8 +191,8 @@ async fn index_js() -> impl IntoResponse {
     )
 }
 
-async fn target_state(State(state): State<AppState>) -> impl IntoResponse {
-    state.db.build_status().await.map(Json).map_err(|err| {
+async fn full_mega_monster(State(state): State<AppState>) -> impl IntoResponse {
+    state.db.full_mega_monster().await.map(Json).map_err(|err| {
         error!(?err, "Error loading target state");
         StatusCode::INTERNAL_SERVER_ERROR
     })
@@ -116,4 +217,22 @@ async fn trigger_build(
     // });
     //
     // StatusCode::ACCEPTED
+}
+
+impl Status {
+    fn to_emoji(&self) -> &'static str {
+        match self {
+            Status::Pass => "✅",
+            Status::Error => "❌",
+        }
+    }
+}
+
+impl BuildInfo {
+    fn link(&self) -> String {
+        format!(
+            "build?nightly={}&target={}&mode={}",
+            self.nightly, self.target, self.mode
+        )
+    }
 }

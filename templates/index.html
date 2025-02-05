@@ -3,22 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Build {{nightly}} {{target}}</title>
-    <link rel="stylesheet" href="/index.css" />
-    <style>
-      .build-indicator-big {
-        padding: 10px;
-      }
-    </style>
+    <title>Does it build?</title>
+    <link rel="stylesheet" href="index.css" />
+    <style></style>
   </head>
   <body>
-    <h1>Build results for nightly-{{nightly}} target {{target}} {{mode}}</h1>
-    <div style="margin-top: 20px" class="{{status}} build-indicator-big">
-      {{status}}
-    </div>
-    <pre>
-{{stderr}}
-    </pre>
+    <h1>Does it build?</h1>
+    <p>
+      This website builds every rustc target on many nightlies to check which
+      ones work and which ones do not.
+    </p>
+
+    <p>You can select a target from the list below and check its history.</p>
+    <p>
+      If that is not what you want, you can visit the
+      <a href="full-table">full table</a> to see
+      <strong>all</strong> information at once (which will really stress test
+      your browser).
+    </p>
+
+    <ul class="target-list">
+      {% for target in targets %}
+      <li>
+        <a href="target?target={{ target }}">{{ target }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+
     <footer class="footer">
       <span>does-it-build {{version}}</span>
       <a href="https://github.com/Noratrieb/does-it-build">
@@ -36,5 +47,6 @@
         </svg>
       </a>
     </footer>
+    <script src="index.js"></script>
   </body>
 </html>

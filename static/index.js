@@ -143,7 +143,7 @@ const miriTable = new Table(
 );
 
 function fetchTargets() {
-  fetch("target-state")
+  fetch("full-mega-monster")
     .then((body) => body.json())
     .then((body) => {
       const core = body.filter((info) => info.mode === "core");

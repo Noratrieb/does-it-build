@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+askama = "0.12.1"
 axum = { version = "0.7.5", features = ["macros"] }
 color-eyre = "0.6.3"
 futures = "0.3.30"

@@ -15,6 +15,10 @@ fn main() {
 }
 
 fn try_get_commit() -> color_eyre::Result<String> {
+    if let Ok(overridden) = std::env::var("DOES_IT_BUILD_OVERRIDE_VERSION") {
+        return Ok(overridden);
+    }
+
     let stdout = std::process::Command::new("git")
         .arg("rev-parse")
         .arg("HEAD")
