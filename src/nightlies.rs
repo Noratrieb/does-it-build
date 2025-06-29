@@ -41,7 +41,7 @@ impl Nightlies {
         // We probe for their existence.
         let latest = all
             .last()
-            .ok_or_eyre("did not find any nightlies in manifets.txt")?;
+            .ok_or_eyre("did not find any nightlies in manifests.txt")?;
 
         for nightly in guess_more_recent_nightlies(&latest)? {
             if nightly_exists(&nightly, cache)
@@ -62,7 +62,6 @@ impl Nightlies {
         &self,
         already_finished: &[FinishedNightly],
     ) -> Option<(String, BuildMode)> {
-        dbg!(&self.all[..20]);
         let already_finished = HashSet::<_, RandomState>::from_iter(already_finished.iter());
 
         self.all

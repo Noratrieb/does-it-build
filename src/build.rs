@@ -38,34 +38,41 @@ impl Display for Toolchain {
 pub async fn background_builder(db: Db) -> Result<()> {
     let mut nightly_cache = NightlyCache::default();
     loop {
-        let nightlies = Nightlies::fetch(&mut nightly_cache)
-            .await
-            .wrap_err("fetching nightlies")?;
-        let already_finished = db
-            .finished_nightlies()
-            .await
-            .wrap_err("fetching finished nightlies")?;
-
-        let next = nightlies.select_latest_to_build(&already_finished);
-        match next {
-            Some((nightly, mode)) => {
-                info!(%nightly, %mode, "Building next nightly");
-                let result = build_every_target_for_toolchain(&db, &nightly, mode)
-                    .await
-                    .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
-                if let Err(err) = result {
-                    error!(%nightly, %mode, ?err, "Failed to build nightly");
-                    db.finish_nightly_as_broken(&nightly, mode)
-                        .await
-                        .wrap_err("marking nightly as broken")?;
-                }
-            }
-            None => {
-                info!("No new nightly, waiting for an hour to try again");
-                tokio::time::sleep(Duration::from_secs(1 * 60 * 60)).await;
-            }
+        if let Err(err) = background_builder_inner(&db, &mut nightly_cache).await {
+            error!("error in background builder: {err}");
         }
     }
+}
+
+async fn background_builder_inner(db: &Db, nightly_cache: &mut NightlyCache) -> Result<()> {
+    let nightlies = Nightlies::fetch(nightly_cache)
+        .await
+        .wrap_err("fetching nightlies")?;
+    let already_finished = db
+        .finished_nightlies()
+        .await
+        .wrap_err("fetching finished nightlies")?;
+
+    let next = nightlies.select_latest_to_build(&already_finished);
+    match next {
+        Some((nightly, mode)) => {
+            info!(%nightly, %mode, "Building next nightly");
+            let result = build_every_target_for_toolchain(&db, &nightly, mode)
+                .await
+                .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
+            if let Err(err) = result {
+                error!(%nightly, %mode, ?err, "Failed to build nightly");
+                db.finish_nightly_as_broken(&nightly, mode)
+                    .await
+                    .wrap_err("marking nightly as broken")?;
+            }
+        }
+        None => {
+            info!("No new nightly, waiting for an hour to try again");
+            tokio::time::sleep(Duration::from_secs(1 * 60 * 60)).await;
+        }
+    }
+    Ok(())
 }
 
 async fn targets_for_toolchain(toolchain: &Toolchain) -> Result<Vec<String>> {
