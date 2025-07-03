@@ -20,6 +20,25 @@
       std builds (on targets that have it) but does not check whether
       codegen/linking works.
     </p>
+    {% if let Some(core_broken) = core_broken %}
+    <p>
+      ⚠️ The core build is broken in general for this nightly, so no data is available ⚠️
+    </p>
+
+    <pre>
+      {{core_broken}}
+    </pre>
+    {% endif %}
+    {% if let Some(std_broken) = std_broken %}
+    <p>
+      ⚠️ The std build is broken for this nightly, so no data is available ⚠️
+    </p>
+
+    <pre>
+      {{std_broken}}
+    </pre>
+    {% endif %}
+
     <p>
       <dl>
         <dt>core failures</dt>

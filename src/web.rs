@@ -156,47 +156,66 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
         builds: Vec<(String, Option<BuildInfo>, Option<BuildInfo>)>,
         core_failures: usize,
         std_failures: usize,
+        core_broken: Option<String>,
+        std_broken: Option<String>,
     }
 
     match state.db.history_for_nightly(&query.nightly).await {
-        Ok(builds) => {
-            let mut builds_grouped =
-                HashMap::<String, (Option<BuildInfo>, Option<BuildInfo>)>::new();
-            for build in &builds {
-                let v = builds_grouped.entry(build.target.clone()).or_default();
-                match build.mode {
-                    BuildMode::Core => v.0 = Some(build.clone()),
-                    BuildMode::MiriStd => v.1 = Some(build.clone()),
-                }
-            }
-
-            let mut std_failures = 0;
-            let mut core_failures = 0;
-            for build in builds {
-                if build.status == Status::Error {
+        Ok(builds) => match state.db.nightly_info(&query.nightly).await {
+            Ok(info) => {
+                let mut builds_grouped =
+                    HashMap::<String, (Option<BuildInfo>, Option<BuildInfo>)>::new();
+                for build in &builds {
+                    let v = builds_grouped.entry(build.target.clone()).or_default();
                     match build.mode {
-                        BuildMode::Core => core_failures += 1,
-                        BuildMode::MiriStd => std_failures += 1,
+                        BuildMode::Core => v.0 = Some(build.clone()),
+                        BuildMode::MiriStd => v.1 = Some(build.clone()),
                     }
                 }
+
+                let mut std_failures = 0;
+                let mut core_failures = 0;
+                for build in builds {
+                    if build.status == Status::Error {
+                        match build.mode {
+                            BuildMode::Core => core_failures += 1,
+                            BuildMode::MiriStd => std_failures += 1,
+                        }
+                    }
+                }
+
+                let mut builds = builds_grouped
+                    .into_iter()
+                    .map(|(k, (v1, v2))| (k, v1, v2))
+                    .collect::<Vec<_>>();
+                builds.sort_by_cached_key(|build| build.0.clone());
+
+                let core_broken = info
+                    .iter()
+                    .find(|info| info.mode == BuildMode::Core && info.is_broken)
+                    .and_then(|info| info.broken_error.clone());
+                let std_broken = info
+                    .iter()
+                    .find(|info| info.mode == BuildMode::MiriStd && info.is_broken)
+                    .and_then(|info| info.broken_error.clone());
+
+                let page = NightlyPage {
+                    nightly: query.nightly,
+                    version: crate::VERSION,
+                    builds,
+                    std_failures,
+                    core_failures,
+                    core_broken,
+                    std_broken,
+                };
+
+                Html(page.render().unwrap()).into_response()
             }
-
-            let mut builds = builds_grouped
-                .into_iter()
-                .map(|(k, (v1, v2))| (k, v1, v2))
-                .collect::<Vec<_>>();
-            builds.sort_by_cached_key(|build| build.0.clone());
-
-            let page = NightlyPage {
-                nightly: query.nightly,
-                version: crate::VERSION,
-                builds,
-                std_failures,
-                core_failures,
-            };
-
-            Html(page.render().unwrap()).into_response()
-        }
+            Err(err) => {
+                error!(?err, "Error loading target state");
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        },
         Err(err) => {
             error!(?err, "Error loading target state");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()

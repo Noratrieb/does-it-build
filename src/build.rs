@@ -62,7 +62,7 @@ async fn background_builder_inner(db: &Db, nightly_cache: &mut NightlyCache) -> 
                 .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
             if let Err(err) = result {
                 error!(%nightly, %mode, ?err, "Failed to build nightly");
-                db.finish_nightly_as_broken(&nightly, mode)
+                db.finish_nightly_as_broken(&nightly, mode, &format!("{err:?}"))
                     .await
                     .wrap_err("marking nightly as broken")?;
             }

@@ -73,6 +73,14 @@ pub struct FinishedNightly {
     pub mode: BuildMode,
 }
 
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Hash)]
+pub struct FinishedNightlyWithBroken {
+    pub nightly: String,
+    pub mode: BuildMode,
+    pub is_broken: bool,
+    pub broken_error: Option<String>,
+}
+
 impl Db {
     pub async fn open(path: &str) -> Result<Self> {
         let db_opts = SqliteConnectOptions::from_str(path)
@@ -118,6 +126,16 @@ impl Db {
         .fetch_all(&self.conn)
         .await
         .wrap_err("getting history for single nightly")
+    }
+
+    pub async fn nightly_info(&self, nightly: &str) -> Result<Vec<FinishedNightlyWithBroken>> {
+        sqlx::query_as::<_, FinishedNightlyWithBroken>(
+            "SELECT nightly, mode, is_broken, broken_error FROM finished_nightly WHERE nightly = ?",
+        )
+        .bind(nightly)
+        .fetch_all(&self.conn)
+        .await
+        .wrap_err("getting finished_nightly for single nightly")
     }
 
     pub async fn target_list(&self) -> Result<Vec<String>> {
@@ -204,10 +222,16 @@ impl Db {
         Ok(())
     }
 
-    pub async fn finish_nightly_as_broken(&self, nightly: &str, mode: BuildMode) -> Result<()> {
-        sqlx::query("INSERT INTO finished_nightly (nightly, mode, is_broken) VALUES (?, ?, TRUE)")
+    pub async fn finish_nightly_as_broken(
+        &self,
+        nightly: &str,
+        mode: BuildMode,
+        error: &str,
+    ) -> Result<()> {
+        sqlx::query("INSERT INTO finished_nightly (nightly, mode, is_broken, broken_error) VALUES (?, ?, TRUE, ?)")
             .bind(nightly)
             .bind(mode)
+            .bind(error)
             .execute(&self.conn)
             .await
             .wrap_err("inserting finished broken nightly")?;
