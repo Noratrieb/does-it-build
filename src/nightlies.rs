@@ -9,7 +9,7 @@ use tracing::debug;
 
 use crate::db::{BuildMode, FinishedNightly};
 
-const EARLIEST_CUTOFF_DATE: &str = "2023-01-01";
+const EARLIEST_CUTOFF_DATE: &str = "2022-01-01";
 
 #[derive(Default)]
 pub struct NightlyCache {
