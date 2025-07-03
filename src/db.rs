@@ -33,7 +33,7 @@ impl Display for BuildMode {
     }
 }
 
-#[derive(sqlx::FromRow, Serialize, Deserialize)]
+#[derive(sqlx::FromRow, Serialize, Deserialize, Clone)]
 pub struct BuildInfo {
     pub nightly: String,
     pub target: String,
@@ -81,7 +81,7 @@ impl Db {
 
         let conn = Pool::connect_with(db_opts)
             .await
-            .wrap_err_with(|| format!("opening db from `{}`", path))?;
+            .wrap_err_with(|| format!("opening db from `{path}`"))?;
         Ok(Self { conn })
     }
 
@@ -117,6 +117,16 @@ impl Db {
         .wrap_err("getting history for single target")
     }
 
+    pub async fn history_for_nightly(&self, nightly: &str) -> Result<Vec<BuildInfo>> {
+        sqlx::query_as::<_, BuildInfo>(
+            "SELECT nightly, target, status, mode FROM build_info WHERE nightly = ?",
+        )
+        .bind(nightly)
+        .fetch_all(&self.conn)
+        .await
+        .wrap_err("getting history for single nightly")
+    }
+
     pub async fn target_list(&self) -> Result<Vec<String>> {
         #[derive(sqlx::FromRow)]
         struct TargetName {
@@ -128,6 +138,21 @@ impl Db {
             .await
             .wrap_err("getting list of all targets")
             .map(|elems| elems.into_iter().map(|elem| elem.target).collect())
+    }
+
+    pub async fn nightly_list(&self) -> Result<Vec<String>> {
+        #[derive(sqlx::FromRow)]
+        struct NightlyName {
+            nightly: String,
+        }
+
+        sqlx::query_as::<_, NightlyName>(
+            "SELECT DISTINCT nightly FROM build_info ORDER BY nightly DESC",
+        )
+        .fetch_all(&self.conn)
+        .await
+        .wrap_err("getting list of all targets")
+        .map(|elems| elems.into_iter().map(|elem| elem.nightly).collect())
     }
 
     pub async fn build_status_full(

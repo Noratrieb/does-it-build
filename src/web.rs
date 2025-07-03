@@ -4,7 +4,7 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use color_eyre::{eyre::Context, Result};
@@ -23,11 +23,11 @@ pub async fn webserver(db: Db) -> Result<()> {
         .route("/", get(web_root))
         .route("/build", get(web_build))
         .route("/target", get(web_target))
+        .route("/nightly", get(web_nightly))
         .route("/full-table", get(web_full_table))
         .route("/index.css", get(index_css))
         .route("/index.js", get(index_js))
         .route("/full-mega-monster", get(full_mega_monster))
-        .route("/trigger-build", post(trigger_build))
         .with_state(AppState { db });
 
     info!("Serving website on port 3000 (commit {})", crate::VERSION);
@@ -144,24 +144,95 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
     }
 }
 
+#[derive(Deserialize)]
+struct NightlyQuery {
+    nightly: String,
+}
+
+async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQuery>) -> Response {
+    use askama::Template;
+    #[derive(askama::Template)]
+    #[template(path = "nightly.html")]
+    struct NightlyPage {
+        nightly: String,
+        version: &'static str,
+        builds: Vec<(String, Option<BuildInfo>, Option<BuildInfo>)>,
+        core_failures: usize,
+        std_failures: usize,
+    }
+
+    match state.db.history_for_nightly(&query.nightly).await {
+        Ok(builds) => {
+            let mut builds_grouped =
+                HashMap::<String, (Option<BuildInfo>, Option<BuildInfo>)>::new();
+            for build in &builds {
+                let v = builds_grouped.entry(build.target.clone()).or_default();
+                match build.mode {
+                    BuildMode::Core => v.0 = Some(build.clone()),
+                    BuildMode::MiriStd => v.1 = Some(build.clone()),
+                }
+            }
+
+            let mut std_failures = 0;
+            let mut core_failures = 0;
+            for build in builds {
+                if build.status == Status::Error {
+                    match build.mode {
+                        BuildMode::Core => core_failures += 1,
+                        BuildMode::MiriStd => std_failures += 1,
+                    }
+                }
+            }
+
+            let mut builds = builds_grouped
+                .into_iter()
+                .map(|(k, (v1, v2))| (k, v1, v2))
+                .collect::<Vec<_>>();
+            builds.sort_by_cached_key(|build| build.0.clone());
+
+            let page = NightlyPage {
+                nightly: query.nightly,
+                version: crate::VERSION,
+                builds,
+                std_failures,
+                core_failures,
+            };
+
+            Html(page.render().unwrap()).into_response()
+        }
+        Err(err) => {
+            error!(?err, "Error loading target state");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
     use askama::Template;
     #[derive(askama::Template)]
     #[template(path = "index.html")]
     struct RootPage {
         targets: Vec<String>,
+        nightlies: Vec<String>,
         version: &'static str,
     }
 
     match state.db.target_list().await {
-        Ok(targets) => {
-            let page = RootPage {
-                targets,
-                version: crate::VERSION,
-            };
+        Ok(targets) => match state.db.nightly_list().await {
+            Ok(nightlies) => {
+                let page = RootPage {
+                    targets,
+                    nightlies,
+                    version: crate::VERSION,
+                };
 
-            Html(page.render().unwrap()).into_response()
-        }
+                Html(page.render().unwrap()).into_response()
+            }
+            Err(err) => {
+                error!(?err, "Error loading nightly state");
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        },
         Err(err) => {
             error!(?err, "Error loading target state");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -201,22 +272,6 @@ async fn full_mega_monster(State(state): State<AppState>) -> impl IntoResponse {
 #[derive(Serialize, Deserialize)]
 struct TriggerBuildBody {
     nightly: String,
-}
-
-#[axum::debug_handler]
-async fn trigger_build(
-    State(_state): State<AppState>,
-    _body: Json<TriggerBuildBody>,
-) -> StatusCode {
-    return StatusCode::BAD_REQUEST;
-    // tokio::spawn(async move {
-    //     let result = build::build_every_target_for_toolchain(&state.db, &body.nightly).await;
-    //     if let Err(err) = result {
-    //         error!(?err, "Error while building");
-    //     }
-    // });
-    //
-    // StatusCode::ACCEPTED
 }
 
 impl Status {

@@ -3,22 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{{target}} build history</title>
+    <title>{{nightly}} build history</title>
     <link rel="stylesheet" href="/index.css" />
-    <style>
-      .build-indicator-big {
-        padding: 10px;
-      }
-    </style>
   </head>
   <body>
-    <h1>Target build history for {{target}}</h1>
+    <h1>Nightly build state for {{nightly}}</h1>
     <a href="/">Back</a>
-    <div style="margin-top: 20px" class="{{status}} build-indicator-big">
-      {{status}}
-    </div>
     <p>
-      This contains the history of this target. Core is built with
+      This contains the status of this nightly. Core is built with
       <code>cargo build --release -Zbuild-std=core</code>. This checks that
       codegen/linking of core works, but does not check whether std builds.
     </p>
@@ -28,6 +20,14 @@
       std builds (on targets that have it) but does not check whether
       codegen/linking works.
     </p>
+    <p>
+      <dl>
+        <dt>core failures</dt>
+        <dd>{{core_failures}}</dd>
+        <dt>std failures</dt>
+        <dd>{{std_failures}}</dd>
+      </dl>
+    </p>
     <table>
       <tr>
         <th>nightly</th>
@@ -36,7 +36,7 @@
       </tr>
       {% for build in builds %}
       <tr>
-        <td><a href="/nightly?nightly={{build.0}}">{{ build.0 }}</a></td>
+        <td><a href="/target?target={{build.0}}">{{ build.0 }}</a></td>
         {% match build.1 %} {% when Some with (build) %}
         <td class="build-cell">
           <a class="build-info-a" href="{{ build.link() }}">

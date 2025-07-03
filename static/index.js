@@ -3,13 +3,13 @@ class Table {
     this.data = data;
     this.elem = document.getElementById(tableElemId);
 
-    document.getElementById(filterElemId).addEventListener("input", (e) => {
+    document.getElementById(filterElemId)?.addEventListener("input", (e) => {
       this.filter.search = e.target.value;
       this.render();
     });
     document
       .getElementById(filterFailedElemId)
-      .addEventListener("input", (e) => {
+      ?.addEventListener("input", (e) => {
         this.filter.filterFailed = e.target.checked;
         this.render();
       });

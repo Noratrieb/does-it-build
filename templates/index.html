@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -22,13 +22,34 @@
       your browser).
     </p>
 
-    <ul class="target-list">
+    <h1>Nightlies</h1>
+    <ul></ul>
+    <p>
+      To view a list of all nightlies, check
+      <a href="#all-nightlies">the list at the end</a>.
+    </p>
+
+    <h2>Targets</h2>
+
+    <ul>
       {% for target in targets %}
       <li>
         <a href="target?target={{ target }}">{{ target }}</a>
       </li>
       {% endfor %}
     </ul>
+
+    <section id="all-nightlies">
+      <h2>All Nightlies</h2>
+
+      <ul>
+        {% for nightly in nightlies %}
+        <li>
+          <a href="nightly?nightly={{ nightly }}">{{ nightly }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
 
     <footer class="footer">
       <span>does-it-build {{version}}</span>

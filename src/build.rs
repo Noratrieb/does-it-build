@@ -57,7 +57,7 @@ async fn background_builder_inner(db: &Db, nightly_cache: &mut NightlyCache) -> 
     match next {
         Some((nightly, mode)) => {
             info!(%nightly, %mode, "Building next nightly");
-            let result = build_every_target_for_toolchain(&db, &nightly, mode)
+            let result = build_every_target_for_toolchain(db, &nightly, mode)
                 .await
                 .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
             if let Err(err) = result {
@@ -69,7 +69,7 @@ async fn background_builder_inner(db: &Db, nightly_cache: &mut NightlyCache) -> 
         }
         None => {
             info!("No new nightly, waiting for an hour to try again");
-            tokio::time::sleep(Duration::from_secs(1 * 60 * 60)).await;
+            tokio::time::sleep(Duration::from_secs(60 * 60)).await;
         }
     }
     Ok(())
@@ -191,7 +191,7 @@ pub async fn build_every_target_for_toolchain(
     let results = futures::stream::iter(
         targets
             .iter()
-            .map(|target| build_single_target(&db, nightly, target, mode)),
+            .map(|target| build_single_target(db, nightly, target, mode)),
     )
     .buffer_unordered(concurrent)
     .collect::<Vec<Result<()>>>()
@@ -266,7 +266,7 @@ async fn build_target(
         BuildMode::Core => {
             let init = Command::new("cargo")
                 .args(["init", "--lib", "--name", "target-test"])
-                .current_dir(&tmpdir)
+                .current_dir(tmpdir)
                 .output()
                 .await
                 .wrap_err("spawning cargo init")?;
@@ -282,7 +282,7 @@ async fn build_target(
                 .arg(format!("+{toolchain}"))
                 .args(["build", "-Zbuild-std=core", "--release"])
                 .args(["--target", target])
-                .current_dir(&tmpdir)
+                .current_dir(tmpdir)
                 .output()
                 .await
                 .wrap_err("spawning cargo build")?
@@ -291,7 +291,7 @@ async fn build_target(
             .arg(format!("+{toolchain}"))
             .args(["miri", "setup"])
             .args(["--target", target])
-            .current_dir(&tmpdir)
+            .current_dir(tmpdir)
             .env("MIRI_SYSROOT", tmpdir)
             .output()
             .await

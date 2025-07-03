@@ -43,7 +43,7 @@ impl Nightlies {
             .last()
             .ok_or_eyre("did not find any nightlies in manifests.txt")?;
 
-        for nightly in guess_more_recent_nightlies(&latest)? {
+        for nightly in guess_more_recent_nightlies(latest)? {
             if nightly_exists(&nightly, cache)
                 .await
                 .wrap_err_with(|| format!("checking whether {nightly} exists"))?
@@ -54,7 +54,10 @@ impl Nightlies {
 
         all.reverse();
 
-        debug!("Loaded {} nightlies from the manifest and manual additions", all.len());
+        debug!(
+            "Loaded {} nightlies from the manifest and manual additions",
+            all.len()
+        );
         Ok(Self { all })
     }
 
