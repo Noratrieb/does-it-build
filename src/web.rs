@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
     routing::get,
-    Json, Router,
+    Router,
 };
 use color_eyre::{eyre::Context, Result};
 use serde::{Deserialize, Serialize};
@@ -24,10 +24,7 @@ pub async fn webserver(db: Db) -> Result<()> {
         .route("/build", get(web_build))
         .route("/target", get(web_target))
         .route("/nightly", get(web_nightly))
-        .route("/full-table", get(web_full_table))
         .route("/index.css", get(index_css))
-        .route("/index.js", get(index_js))
-        .route("/full-mega-monster", get(full_mega_monster))
         .with_state(AppState { db });
 
     info!("Serving website on port 3000 (commit {})", crate::VERSION);
@@ -240,9 +237,6 @@ async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-async fn web_full_table() -> impl IntoResponse {
-    Html(include_str!("../static/full-table.html").replace("{{version}}", crate::VERSION))
-}
 async fn index_css() -> impl IntoResponse {
     (
         [(
@@ -251,22 +245,6 @@ async fn index_css() -> impl IntoResponse {
         )],
         include_str!("../static/index.css"),
     )
-}
-async fn index_js() -> impl IntoResponse {
-    (
-        [(
-            axum::http::header::CONTENT_TYPE,
-            axum::http::HeaderValue::from_static("text/javascript"),
-        )],
-        include_str!("../static/index.js"),
-    )
-}
-
-async fn full_mega_monster(State(state): State<AppState>) -> impl IntoResponse {
-    state.db.full_mega_monster().await.map(Json).map_err(|err| {
-        error!(?err, "Error loading target state");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })
 }
 
 #[derive(Serialize, Deserialize)]

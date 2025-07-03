@@ -100,13 +100,6 @@ impl Db {
         Ok(())
     }
 
-    pub async fn full_mega_monster(&self) -> Result<Vec<BuildInfo>> {
-        sqlx::query_as::<_, BuildInfo>("SELECT nightly, target, status, mode FROM build_info")
-            .fetch_all(&self.conn)
-            .await
-            .wrap_err("getting build status from DB")
-    }
-
     pub async fn history_for_target(&self, target: &str) -> Result<Vec<BuildInfo>> {
         sqlx::query_as::<_, BuildInfo>(
             "SELECT nightly, target, status, mode FROM build_info WHERE target = ?",

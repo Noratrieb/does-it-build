@@ -23,7 +23,13 @@
     </p>
 
     <h1>Nightlies</h1>
-    <ul></ul>
+    <ul>
+      {% for nightly in nightlies.iter().take(5) %}
+      <li>
+        <a href="nightly?nightly={{ nightly }}">{{ nightly }}</a>
+      </li>
+      {% endfor %}
+    </ul>
     <p>
       To view a list of all nightlies, check
       <a href="#all-nightlies">the list at the end</a>.
@@ -68,6 +74,5 @@
         </svg>
       </a>
     </footer>
-    <script src="index.js"></script>
   </body>
 </html>
