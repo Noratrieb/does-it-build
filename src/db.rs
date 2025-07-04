@@ -49,6 +49,9 @@ pub struct FullBuildInfo {
     pub stderr: String,
     pub mode: BuildMode,
     pub rustflags: Option<String>,
+    pub build_date: Option<i64>,
+    pub does_it_build_version: Option<String>,
+    pub build_duration_ms: Option<i64>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, sqlx::Type, Serialize, Deserialize)]
@@ -107,7 +110,8 @@ impl Db {
 
     pub async fn insert(&self, info: FullBuildInfo) -> Result<()> {
         sqlx::query(
-            "INSERT INTO build_info (nightly, target, status, stderr, mode, rustflags) VALUES (?, ?, ?, ?, ?, ?);",
+            "INSERT INTO build_info (nightly, target, status, stderr, mode, rustflags, build_date, does_it_build_version, build_duration_ms) \
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
         )
         .bind(info.nightly)
         .bind(info.target)
@@ -115,6 +119,9 @@ impl Db {
         .bind(info.stderr)
         .bind(info.mode)
         .bind(info.rustflags)
+        .bind(info.build_date)
+        .bind(info.does_it_build_version)
+        .bind(info.build_duration_ms)
         .execute(&self.conn)
         .await
         .wrap_err("inserting build info into database")?;
@@ -214,7 +221,7 @@ impl Db {
         mode: BuildMode,
     ) -> Result<Option<FullBuildInfo>> {
         let result = sqlx::query_as::<_, FullBuildInfo>(
-            "SELECT nightly, target, status, stderr, mode, rustflags FROM build_info
+            "SELECT nightly, target, status, stderr, mode, rustflags, build_date, does_it_build_version, build_duration_ms FROM build_info
             WHERE nightly = ? AND target = ? AND mode = ?",
         )
         .bind(nightly)

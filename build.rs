@@ -12,6 +12,12 @@ fn main() {
     };
 
     println!("cargo:rustc-env=GIT_COMMIT={version}");
+    let version_short = if version.len() > 16 {
+        &version[..16]
+    } else {
+        &version
+    };
+    println!("cargo:rustc-env=GIT_COMMIT_SHORT={version_short}");
 }
 
 fn try_get_commit() -> color_eyre::Result<String> {

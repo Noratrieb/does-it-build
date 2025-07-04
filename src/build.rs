@@ -2,7 +2,7 @@ use std::{
     fmt::{Debug, Display},
     num::NonZeroUsize,
     path::Path,
-    time::Duration,
+    time::{Duration, Instant, SystemTime},
 };
 
 use color_eyre::{
@@ -242,6 +242,8 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMo
 
     let tmpdir = tempfile::tempdir().wrap_err("creating temporary directory")?;
 
+    let start_time = Instant::now();
+
     let result = build_target(
         tmpdir.path(),
         &Toolchain::from_nightly(nightly),
@@ -258,6 +260,16 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMo
         stderr: result.stderr,
         mode,
         rustflags: result.rustflags,
+        build_date: Some(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+                .try_into()
+                .unwrap(),
+        ),
+        does_it_build_version: Some(crate::VERSION_SHORT.into()),
+        build_duration_ms: Some(start_time.elapsed().as_millis().try_into().unwrap()),
     })
     .await?;
 

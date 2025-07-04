@@ -8,6 +8,7 @@ use db::Db;
 use tracing_subscriber::EnvFilter;
 
 const VERSION: &str = env!("GIT_COMMIT");
+const VERSION_SHORT: &str = env!("GIT_COMMIT_SHORT");
 
 #[tokio::main]
 async fn main() -> Result<()> {
