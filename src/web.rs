@@ -52,7 +52,7 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
         rustflags: Option<String>,
         version: &'static str,
         status: Status,
-    }    
+    }
 
     match state
         .db
@@ -140,11 +140,9 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
             let mut builds = builds_grouped
                 .into_iter()
                 .map(|(k, (v1, v2))| (k, v1, v2))
-                .filter(|(_, build, _)| {
-                    !filter_failures
-                        || build
-                            .as_ref()
-                            .is_some_and(|build| build.status == Status::Error)
+                .filter(|(_, core_build, std_build)| {
+                    filter_build(filter_failures, core_build)
+                        || filter_build(filter_failures, std_build)
                 })
                 .collect::<Vec<_>>();
             builds.sort_by_cached_key(|build| Reverse(build.0.clone()));
@@ -216,11 +214,9 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                 let mut builds = builds_grouped
                     .into_iter()
                     .map(|(k, (v1, v2))| (k, v1, v2))
-                    .filter(|(_, build, _)| {
-                        !filter_failures
-                            || build
-                                .as_ref()
-                                .is_some_and(|build| build.status == Status::Error)
+                    .filter(|(_, core_build, std_build)| {
+                        filter_build(filter_failures, core_build)
+                            || filter_build(filter_failures, std_build)
                     })
                     .collect::<Vec<_>>();
                 builds.sort_by_cached_key(|build| build.0.clone());
@@ -323,4 +319,11 @@ impl BuildInfo {
             self.nightly, self.target, self.mode
         )
     }
+}
+
+fn filter_build(filter_failures: bool, build: &Option<BuildInfo>) -> bool {
+    !filter_failures
+        || build
+            .as_ref()
+            .is_some_and(|build| build.status == Status::Error)
 }
