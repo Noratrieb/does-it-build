@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -13,7 +13,7 @@
   </head>
   <body>
     <h1>Target build history for {{target}}</h1>
-    <a href="/">Back</a>
+    <a href="/">Home</a>
     <div style="margin-top: 20px" class="{{status}} build-indicator-big">
       {{status}}
     </div>
@@ -28,11 +28,20 @@
       std builds (on targets that have it) but does not check whether
       codegen/linking works.
     </p>
+    {% if showing_failures %}
+    <p>
+      <a href="/target?target={{target}}">show all</a>
+    </p>
+    {% else %}
+    <p>
+      <a href="/target?target={{target}}&failures=true">filter failures</a>
+    </p>
+    {% endif %}
     <table>
       <tr>
         <th>nightly</th>
-        <th>core<br>codegen</th>
-        <th>std<br>check</th>
+        <th>core<br />codegen</th>
+        <th>std<br />check</th>
       </tr>
       {% for build in builds %}
       <tr>

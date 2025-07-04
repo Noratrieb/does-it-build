@@ -72,6 +72,7 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
 #[derive(Deserialize)]
 struct TargetQuery {
     target: String,
+    failures: Option<bool>,
 }
 
 async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQuery>) -> Response {
@@ -83,7 +84,10 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
         status: String,
         version: &'static str,
         builds: Vec<(String, Option<BuildInfo>, Option<BuildInfo>)>,
+        showing_failures: bool,
     }
+
+    let filter_failures = query.failures.unwrap_or(false);
 
     match state.db.history_for_target(&query.target).await {
         Ok(builds) => {
@@ -122,6 +126,12 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
             let mut builds = builds_grouped
                 .into_iter()
                 .map(|(k, (v1, v2))| (k, v1, v2))
+                .filter(|(_, build, _)| {
+                    !filter_failures
+                        || build
+                            .as_ref()
+                            .is_some_and(|build| build.status == Status::Error)
+                })
                 .collect::<Vec<_>>();
             builds.sort_by_cached_key(|build| Reverse(build.0.clone()));
 
@@ -130,6 +140,7 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
                 target: query.target,
                 version: crate::VERSION,
                 builds,
+                showing_failures: filter_failures,
             };
 
             Html(page.render().unwrap()).into_response()
@@ -144,6 +155,7 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
 #[derive(Deserialize)]
 struct NightlyQuery {
     nightly: String,
+    failures: Option<bool>,
 }
 
 async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQuery>) -> Response {
@@ -158,7 +170,10 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
         std_failures: usize,
         core_broken: Option<String>,
         std_broken: Option<String>,
+        showing_failures: bool,
     }
+
+    let filter_failures = query.failures.unwrap_or(false);
 
     match state.db.history_for_nightly(&query.nightly).await {
         Ok(builds) => match state.db.nightly_info(&query.nightly).await {
@@ -187,6 +202,12 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                 let mut builds = builds_grouped
                     .into_iter()
                     .map(|(k, (v1, v2))| (k, v1, v2))
+                    .filter(|(_, build, _)| {
+                        !filter_failures
+                            || build
+                                .as_ref()
+                                .is_some_and(|build| build.status == Status::Error)
+                    })
                     .collect::<Vec<_>>();
                 builds.sort_by_cached_key(|build| build.0.clone());
 
@@ -207,6 +228,7 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                     core_failures,
                     core_broken,
                     std_broken,
+                    showing_failures: filter_failures,
                 };
 
                 Html(page.render().unwrap()).into_response()

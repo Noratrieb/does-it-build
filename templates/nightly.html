@@ -8,7 +8,7 @@
   </head>
   <body>
     <h1>Nightly build state for {{nightly}}</h1>
-    <a href="/">Back</a>
+    <a href="/">Home</a>
     <p>
       This contains the status of this nightly. Core is built with
       <code>cargo build --release -Zbuild-std=core</code>. This checks that
@@ -47,6 +47,15 @@
         <dd>{{std_failures}}</dd>
       </dl>
     </p>
+    {% if showing_failures %}
+    <p>
+      <a href="/nightly?nightly={{nightly}}">show all</a>
+    </p>
+    {% else %}
+    <p>
+      <a href="/nightly?nightly={{nightly}}&failures=true">filter failures</a>
+    </p>
+    {% endif %}
     <table>
       <tr>
         <th>nightly</th>

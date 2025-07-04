@@ -13,6 +13,7 @@
   </head>
   <body>
     <h1>Build results for nightly-{{nightly}} target {{target}} {{mode}}</h1>
+    <a href="/">Home</a>
     <div style="margin-top: 20px" class="{{status}} build-indicator-big">
       {{status}}
     </div>
@@ -20,10 +21,14 @@
 {{stderr}}
     </pre>
     <p>
-      <a href="/target?target={{target}}">Build history for target {{target}}</a>
+      <a href="/target?target={{target}}"
+        >Build history for target {{target}}</a
+      >
     </p>
     <p>
-      <a href="/nightly?nightly={{nightly}}">Build state for nightly {{nightly}}</a>
+      <a href="/nightly?nightly={{nightly}}"
+        >Build state for nightly {{nightly}}</a
+      >
     </p>
     <footer class="footer">
       <span>does-it-build {{version}}</span>
