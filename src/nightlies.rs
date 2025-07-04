@@ -27,8 +27,7 @@ impl Nightlies {
             .filter(|date| date.as_str() > EARLIEST_CUTOFF_DATE)
             .collect::<Vec<_>>();
 
-        all.sort();
-        all.reverse();
+        all.sort_by(|a, b| b.cmp(a)); // Reverse sort.
 
         debug!(
             "Loaded {} nightlies from the manifest and manual additions",
