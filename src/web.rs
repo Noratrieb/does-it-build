@@ -11,7 +11,7 @@ use color_eyre::{eyre::Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use crate::db::{BuildInfo, BuildMode, Db, Status};
+use crate::db::{BuildInfo, BuildMode, BuildStats, Db, Status};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -25,6 +25,7 @@ pub async fn webserver(db: Db) -> Result<()> {
         .route("/target", get(web_target))
         .route("/nightly", get(web_nightly))
         .route("/index.css", get(index_css))
+        .route("/index.js", get(index_js))
         .with_state(AppState { db });
 
     info!("Serving website on port 3000 (commit {})", crate::VERSION);
@@ -257,35 +258,37 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
 
 async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
     use askama::Template;
-    #[derive(askama::Template)]
-    #[template(path = "index.html")]
-    struct RootPage {
-        targets: Vec<String>,
-        nightlies: Vec<String>,
-        version: &'static str,
-    }
 
-    match state.db.target_list().await {
-        Ok(targets) => match state.db.nightly_list().await {
-            Ok(nightlies) => {
-                let page = RootPage {
-                    targets,
-                    nightlies,
-                    version: crate::VERSION,
-                };
-
-                Html(page.render().unwrap()).into_response()
-            }
-            Err(err) => {
-                error!(?err, "Error loading nightly state");
-                StatusCode::INTERNAL_SERVER_ERROR.into_response()
-            }
-        },
-        Err(err) => {
-            error!(?err, "Error loading target state");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    async fn render(state: AppState) -> Result<Response> {
+        #[derive(askama::Template)]
+        #[template(path = "index.html")]
+        struct RootPage {
+            targets: Vec<String>,
+            nightlies: Vec<String>,
+            version: &'static str,
+            build_count: BuildStats,
         }
+
+        let targets = state.db.target_list().await?;
+        let nightlies = state.db.nightly_list().await?;
+        let build_count = state.db.build_count().await?;
+
+        let page = RootPage {
+            targets,
+            nightlies,
+            version: crate::VERSION,
+            build_count,
+        };
+
+        Ok(Html(page.render().unwrap()).into_response())
     }
+
+    render(state)
+        .await
+        .unwrap_or_else(|err: color_eyre::eyre::Error| {
+            error!(?err, "Error loading data for root page");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        })
 }
 
 async fn index_css() -> impl IntoResponse {
@@ -295,6 +298,16 @@ async fn index_css() -> impl IntoResponse {
             axum::http::HeaderValue::from_static("text/css; charset=utf-8"),
         )],
         include_str!("../static/index.css"),
+    )
+}
+
+async fn index_js() -> impl IntoResponse {
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("application/javascript; charset=utf-8"),
+        )],
+        include_str!("../static/index.js"),
     )
 }
 

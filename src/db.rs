@@ -82,6 +82,17 @@ pub struct FinishedNightlyWithBroken {
     pub broken_error: Option<String>,
 }
 
+pub struct BuildStats {
+    pub pass_count: u32,
+    pub error_count: u32,
+}
+
+impl BuildStats {
+    pub fn total(&self) -> u32 {
+        self.pass_count + self.error_count
+    }
+}
+
 impl Db {
     pub async fn open(path: &str) -> Result<Self> {
         let db_opts = SqliteConnectOptions::from_str(path)
@@ -166,6 +177,34 @@ impl Db {
         .await
         .wrap_err("getting list of all targets")
         .map(|elems| elems.into_iter().map(|elem| elem.nightly).collect())
+    }
+
+    pub async fn build_count(&self) -> Result<BuildStats> {
+        #[derive(sqlx::FromRow)]
+        struct BuildStat {
+            build_count: u32,
+            status: Status,
+        }
+
+        let results = sqlx::query_as::<_, BuildStat>(
+            "SELECT COUNT(status) as build_count, status FROM build_info GROUP BY status",
+        )
+        .fetch_all(&self.conn)
+        .await
+        .wrap_err("getting list of all targets")?;
+
+        let count = |status| {
+            results
+                .iter()
+                .find(|row| row.status == status)
+                .map(|row| row.build_count)
+                .unwrap_or(0)
+        };
+
+        Ok(BuildStats {
+            pass_count: count(Status::Pass),
+            error_count: count(Status::Error),
+        })
     }
 
     pub async fn build_status_full(

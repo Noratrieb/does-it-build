@@ -5,21 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Does it build?</title>
     <link rel="stylesheet" href="index.css" />
-    <style></style>
+    <script type="module" defer src="index.js"></script>
   </head>
   <body>
     <h1>Does it build?</h1>
     <p>
-      This website builds every rustc target on many nightlies to check which
-      ones work and which ones do not.
+      This website builds the standard libary for every rustc target on every
+      nightly to check whether it builds or not.
+    </p>
+    <p>
+      There are currently
+      <span class="number">{{build_count.total()}}</span> build results stored,
+      with <span class="number">{{build_count.pass_count}}</span> passing and
+      <span class="number">{{build_count.error_count}}</span> erroring.
     </p>
 
-    <p>You can select a target from the list below and check its history.</p>
     <p>
-      If that is not what you want, you can visit the
-      <a href="full-table">full table</a> to see
-      <strong>all</strong> information at once (which will really stress test
-      your browser).
+      You can select a nightly or target from the list below and check its
+      history.
     </p>
 
     <h1>Nightlies</h1>
