@@ -41,6 +41,19 @@ struct BuildQuery {
 }
 
 async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -> Response {
+    use askama::Template;
+    #[derive(askama::Template)]
+    #[template(path = "build.html")]
+    struct BuildPage {
+        nightly: String,
+        target: String,
+        stderr: String,
+        mode: BuildMode,
+        rustflags: Option<String>,
+        version: &'static str,
+        status: Status,
+    }    
+
     match state
         .db
         .build_status_full(
@@ -51,15 +64,16 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
         .await
     {
         Ok(Some(build)) => {
-            let page = include_str!("../static/build.html")
-                .replace("{{nightly}}", &query.nightly)
-                .replace("{{target}}", &query.target)
-                .replace("{{stderr}}", &build.stderr)
-                .replace("{{mode}}", &build.mode.to_string())
-                .replace("{{version}}", crate::VERSION)
-                .replace("{{status}}", &build.status.to_string());
-
-            Html(page).into_response()
+            let page = BuildPage {
+                nightly: query.nightly,
+                target: query.target,
+                stderr: build.stderr,
+                mode: build.mode,
+                rustflags: build.rustflags,
+                version: crate::VERSION,
+                status: build.status,
+            };
+            Html(page.render().unwrap()).into_response()
         }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(err) => {

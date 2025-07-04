@@ -17,6 +17,11 @@
     <div style="margin-top: 20px" class="{{status}} build-indicator-big">
       {{status}}
     </div>
+    {% if let Some(rustflags) = rustflags %}
+    <p>
+      Using rustflags: <b><code>{{rustflags}}</code></b>
+    </p>
+    {% endif %}
     <pre>
 {{stderr}}
     </pre>

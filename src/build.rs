@@ -18,6 +18,22 @@ use crate::{
     nightlies::Nightlies,
 };
 
+struct CustomBuildFlags {
+    target: &'static str,
+    flags: &'static [&'static str],
+}
+
+const CUSTOM_CORE_FLAGS: &[CustomBuildFlags] = &[
+    CustomBuildFlags {
+        target: "avr-none",
+        flags: &["-Ctarget-cpu=atmega328p"],
+    },
+    CustomBuildFlags {
+        target: "amdgcn-amd-amdhsa",
+        flags: &["-Ctarget-cpu=gfx1100"],
+    },
+];
+
 pub struct Toolchain(String);
 impl Toolchain {
     pub fn from_nightly(nightly: &str) -> Self {
@@ -44,9 +60,7 @@ pub async fn background_builder(db: Db) -> Result<()> {
 }
 
 async fn background_builder_inner(db: &Db) -> Result<()> {
-    let nightlies = Nightlies::fetch()
-        .await
-        .wrap_err("fetching nightlies")?;
+    let nightlies = Nightlies::fetch().await.wrap_err("fetching nightlies")?;
     let already_finished = db
         .finished_nightlies()
         .await
@@ -243,6 +257,7 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMo
         status: result.status,
         stderr: result.stderr,
         mode,
+        rustflags: result.rustflags,
     })
     .await?;
 
@@ -252,6 +267,7 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMo
 struct BuildResult {
     status: Status,
     stderr: String,
+    rustflags: Option<String>,
 }
 
 /// Build a target core in a temporary directory and see whether it passes or not.
@@ -261,6 +277,8 @@ async fn build_target(
     target: &str,
     mode: BuildMode,
 ) -> Result<BuildResult> {
+    let mut rustflags = None;
+
     let output = match mode {
         BuildMode::Core => {
             let init = Command::new("cargo")
@@ -277,11 +295,22 @@ async fn build_target(
             std::fs::write(&librs, "#![no_std]\n")
                 .wrap_err_with(|| format!("writing to {}", librs.display()))?;
 
-            Command::new("cargo")
-                .arg(format!("+{toolchain}"))
+            let mut cmd = Command::new("cargo");
+            cmd.arg(format!("+{toolchain}"))
                 .args(["build", "-Zbuild-std=core", "--release"])
-                .args(["--target", target])
-                .current_dir(tmpdir)
+                .args(["--target", target]);
+
+            let extra_flags = CUSTOM_CORE_FLAGS
+                .iter()
+                .find(|flags| flags.target == target);
+
+            if let Some(extra_flags) = extra_flags {
+                let flags = extra_flags.flags.join(" ");
+                cmd.env("RUSTFLAGS", &flags);
+                rustflags = Some(flags);
+            }
+
+            cmd.current_dir(tmpdir)
                 .output()
                 .await
                 .wrap_err("spawning cargo build")?
@@ -307,5 +336,9 @@ async fn build_target(
 
     info!("Finished build");
 
-    Ok(BuildResult { status, stderr })
+    Ok(BuildResult {
+        status,
+        stderr,
+        rustflags,
+    })
 }
