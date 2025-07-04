@@ -31,6 +31,10 @@ fn try_get_commit() -> color_eyre::Result<String> {
 }
 
 fn has_no_changes() -> color_eyre::Result<bool> {
+    if std::env::var("DOES_IT_BUILD_OVERRIDE_VERSION").is_ok() {
+        return Ok(true);
+    }
+
     Ok(std::process::Command::new("git")
         .args(["diff", "--no-ext-diff", "--quiet", "--exit-code"])
         .output()?
