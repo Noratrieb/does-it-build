@@ -15,7 +15,7 @@ use tracing::{debug, error, info};
 
 use crate::{
     db::{BuildMode, Db, FullBuildInfo, Status},
-    nightlies::{Nightlies, NightlyCache},
+    nightlies::Nightlies,
 };
 
 pub struct Toolchain(String);
@@ -36,16 +36,15 @@ impl Display for Toolchain {
 }
 
 pub async fn background_builder(db: Db) -> Result<()> {
-    let mut nightly_cache = NightlyCache::default();
     loop {
-        if let Err(err) = background_builder_inner(&db, &mut nightly_cache).await {
+        if let Err(err) = background_builder_inner(&db).await {
             error!("error in background builder: {err}");
         }
     }
 }
 
-async fn background_builder_inner(db: &Db, nightly_cache: &mut NightlyCache) -> Result<()> {
-    let nightlies = Nightlies::fetch(nightly_cache)
+async fn background_builder_inner(db: &Db) -> Result<()> {
+    let nightlies = Nightlies::fetch()
         .await
         .wrap_err("fetching nightlies")?;
     let already_finished = db

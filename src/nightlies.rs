@@ -1,21 +1,13 @@
 use std::collections::HashSet;
 use std::hash::RandomState;
 
-use color_eyre::eyre::{Context, OptionExt};
+use color_eyre::eyre::Context;
 use color_eyre::Result;
-use reqwest::StatusCode;
-use time::Duration;
 use tracing::debug;
 
 use crate::db::{BuildMode, FinishedNightly};
 
 const EARLIEST_CUTOFF_DATE: &str = "2022-01-01";
-
-#[derive(Default)]
-pub struct NightlyCache {
-    /// Nightlies that exist.
-    exists: HashSet<String>,
-}
 
 /// All nightlies that exist.
 pub struct Nightlies {
@@ -23,7 +15,7 @@ pub struct Nightlies {
 }
 
 impl Nightlies {
-    pub async fn fetch(cache: &mut NightlyCache) -> Result<Nightlies> {
+    pub async fn fetch() -> Result<Nightlies> {
         let manifests = reqwest::get("https://static.rust-lang.org/manifests.txt")
             .await
             .wrap_err("fetching https://static.rust-lang.org/manifests.txt")?
@@ -36,22 +28,6 @@ impl Nightlies {
             .collect::<Vec<_>>();
 
         all.sort();
-
-        // The manifests is only updated weekly, which means new nightlies won't be contained.
-        // We probe for their existence.
-        let latest = all
-            .last()
-            .ok_or_eyre("did not find any nightlies in manifests.txt")?;
-
-        for nightly in guess_more_recent_nightlies(latest)? {
-            if nightly_exists(&nightly, cache)
-                .await
-                .wrap_err_with(|| format!("checking whether {nightly} exists"))?
-            {
-                all.push(nightly);
-            }
-        }
-
         all.reverse();
 
         debug!(
@@ -92,31 +68,6 @@ fn nightlies_from_manifest(manifest: &str) -> Vec<String> {
         .collect()
 }
 
-fn guess_more_recent_nightlies(latest: &str) -> Result<Vec<String>> {
-    let format = time::macros::format_description!("[year]-[month]-[day]");
-    let latest = time::Date::parse(latest, format).wrap_err("latest nightly has invalid format")?;
-
-    // manifests.txt is updated weekly, so let's try 8 just in case.
-    Ok((1..=8)
-        .filter_map(|offset| latest.checked_add(Duration::days(offset)))
-        .map(|date| date.format(format).unwrap())
-        .collect())
-}
-
-async fn nightly_exists(nightly: &str, cache: &mut NightlyCache) -> Result<bool> {
-    if cache.exists.contains(nightly) {
-        return Ok(true);
-    }
-    let url = format!("https://static.rust-lang.org/dist/{nightly}/channel-rust-nightly.toml");
-    let resp = reqwest::get(&url).await.wrap_err("fetching channel")?;
-    debug!(%nightly, %url, status = %resp.status(), "Checked whether a recent nightly exists");
-    let exists = resp.status() == StatusCode::OK;
-    if exists {
-        cache.exists.insert(nightly.to_owned());
-    }
-    Ok(exists)
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -128,23 +79,5 @@ static.rust-lang.org/dist/2024-08-23/channel-rust-nightly.toml";
 
         let nightlies = super::nightlies_from_manifest(&test_manifest);
         assert_eq!(nightlies, vec!["2024-08-22", "2024-08-23"]);
-    }
-
-    #[test]
-    fn guess() {
-        let nightlies = super::guess_more_recent_nightlies("2024-08-28").unwrap();
-        assert_eq!(
-            nightlies,
-            [
-                "2024-08-29",
-                "2024-08-30",
-                "2024-08-31",
-                "2024-09-01",
-                "2024-09-02",
-                "2024-09-03",
-                "2024-09-04",
-                "2024-09-05",
-            ]
-        );
     }
 }
