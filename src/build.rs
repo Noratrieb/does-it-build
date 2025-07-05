@@ -299,7 +299,7 @@ async fn build_target(
     match mode {
         BuildMode::Core => {
             cmd.arg(format!("+{toolchain}"))
-                .args(["build", "-Zbuild-std=core", "--release"])
+                .args(["build", "-Zbuild-std=core", "--release", "-j1"])
                 .args(["--target", target]);
 
             let extra_flags = CUSTOM_CORE_FLAGS
@@ -314,7 +314,7 @@ async fn build_target(
         }
         BuildMode::Std => {
             cmd.arg(format!("+{toolchain}"))
-                .args(["build", "-Zbuild-std", "--release"])
+                .args(["build", "-Zbuild-std", "--release", "-j1"])
                 .args(["--target", target]);
 
             let extra_flags = CUSTOM_CORE_FLAGS
