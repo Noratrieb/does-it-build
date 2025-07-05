@@ -44,7 +44,7 @@ impl Nightlies {
 
         self.all
             .iter()
-            .flat_map(|nightly| [(nightly, BuildMode::Core), (nightly, BuildMode::Std)])
+            .flat_map(|nightly| [(nightly, BuildMode::Std)])
             .find(|(nightly, mode)| {
                 !already_finished.contains(&FinishedNightly {
                     nightly: (*nightly).to_owned(),
