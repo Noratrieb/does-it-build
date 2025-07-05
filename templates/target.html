@@ -23,10 +23,12 @@
       codegen/linking of core works, but does not check whether std builds.
     </p>
     <p>
-      std is being built with <code>cargo miri setup</code>. If a target does
-      not support std, the std column represents core/alloc. This checks that
-      std builds (on targets that have it) but does not check whether
+      std is being built with <code>cargo check -Zbuild-std</code>. If a target
+      does not support std, the std column represents core/alloc. This checks
+      that std checks (on targets that have it) but does not check whether
       codegen/linking works.
+
+      For older builds, <code>cargo miri setup</code> was used instead.
     </p>
     {% if showing_failures %}
     <p>

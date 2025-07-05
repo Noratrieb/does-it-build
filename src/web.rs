@@ -34,11 +34,33 @@ pub async fn webserver(db: Db) -> Result<()> {
     axum::serve(listener, app).await.wrap_err("failed to serve")
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct LegacyBuildMode(BuildMode);
+
+impl<'de> serde::Deserialize<'de> for LegacyBuildMode {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "core" => Ok(LegacyBuildMode(BuildMode::Core)),
+            "std" => Ok(LegacyBuildMode(BuildMode::Std)),
+            // This mode used to be called "miri-std" but it has been renamed to "std" using build-std.
+            // Allow the old value to keep links working but map it to std.
+            "miri-std" => Ok(LegacyBuildMode(BuildMode::Std)),
+            _ => Err(serde::de::Error::custom(format!(
+                "invalid build mode, expected 'core', 'std', or 'miri-std'"
+            ))),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct BuildQuery {
     nightly: String,
     target: String,
-    mode: Option<BuildMode>,
+    mode: Option<LegacyBuildMode>,
 }
 
 async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery>) -> Response {
@@ -63,7 +85,7 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
         .build_status_full(
             &query.nightly,
             &query.target,
-            query.mode.unwrap_or(BuildMode::Core),
+            query.mode.map(|mode| mode.0).unwrap_or(BuildMode::Core),
         )
         .await
     {
@@ -132,8 +154,8 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
                 .max_by_key(|elem| elem.nightly.clone());
 
             let status = match (latest_core, latest_miri) {
-                (Some(core), Some(miri)) => {
-                    if core.status == Status::Error || miri.status == Status::Error {
+                (Some(core), Some(std)) => {
+                    if core.status == Status::Error || std.status == Status::Error {
                         Status::Error
                     } else {
                         Status::Pass
@@ -150,7 +172,7 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
                 let v = builds_grouped.entry(build.nightly.clone()).or_default();
                 match build.mode {
                     BuildMode::Core => v.0 = Some(build),
-                    BuildMode::MiriStd => v.1 = Some(build),
+                    BuildMode::Std => v.1 = Some(build),
                 }
             }
 
@@ -213,7 +235,7 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                     let v = builds_grouped.entry(build.target.clone()).or_default();
                     match build.mode {
                         BuildMode::Core => v.0 = Some(build.clone()),
-                        BuildMode::MiriStd => v.1 = Some(build.clone()),
+                        BuildMode::Std => v.1 = Some(build.clone()),
                     }
                 }
 
@@ -223,7 +245,7 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                     if build.status == Status::Error {
                         match build.mode {
                             BuildMode::Core => core_failures += 1,
-                            BuildMode::MiriStd => std_failures += 1,
+                            BuildMode::Std => std_failures += 1,
                         }
                     }
                 }
@@ -244,7 +266,7 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                     .and_then(|info| info.broken_error.clone());
                 let std_broken = info
                     .iter()
-                    .find(|info| info.mode == BuildMode::MiriStd && info.is_broken)
+                    .find(|info| info.mode == BuildMode::Std && info.is_broken)
                     .and_then(|info| info.broken_error.clone());
 
                 let page = NightlyPage {

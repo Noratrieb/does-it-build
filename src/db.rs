@@ -14,26 +14,25 @@ pub struct Db {
 
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
-#[derive(Debug, Clone, Copy, sqlx::Type, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, sqlx::Type, Serialize, PartialEq, Eq, Hash)]
 #[sqlx(rename_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum BuildMode {
-    /// `-Zbuild-std=core`
+    /// `build -Zbuild-std=core`
     Core,
-    /// `cargo miri setup`
-    MiriStd,
+    /// `check -Zbuild-std`
+    Std,
 }
 
 impl Display for BuildMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Core => f.write_str("core"),
-            Self::MiriStd => f.write_str("miri-std"),
+            Self::Std => f.write_str("std"),
         }
     }
 }
 
-#[derive(sqlx::FromRow, Serialize, Deserialize, Clone)]
+#[derive(sqlx::FromRow, Serialize, Clone)]
 pub struct BuildInfo {
     pub nightly: String,
     pub target: String,
@@ -41,7 +40,7 @@ pub struct BuildInfo {
     pub mode: BuildMode,
 }
 
-#[derive(Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Clone, sqlx::FromRow, Serialize)]
 pub struct FullBuildInfo {
     pub nightly: String,
     pub target: String,

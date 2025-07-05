@@ -61,7 +61,11 @@ pub async fn background_builder(db: Db) -> Result<()> {
 
     loop {
         if let Err(err) = background_builder_inner(&db).await {
-            error!("error in background builder: {err}");
+            error!(
+                ?err,
+                "error in background builder, waiting for an hour before retrying: {err}"
+            );
+            tokio::time::sleep(Duration::from_secs(3600)).await;
         }
     }
 }
@@ -145,20 +149,7 @@ async fn install_toolchain(toolchain: &Toolchain, mode: BuildMode) -> Result<()>
     if !result.status.success() {
         bail!("rustup failed: {:?}", String::from_utf8(result.stderr));
     }
-    if mode == BuildMode::MiriStd {
-        let result = Command::new("rustup")
-            .arg("component")
-            .arg("add")
-            .arg("miri")
-            .arg("--toolchain")
-            .arg(&toolchain.0)
-            .output()
-            .await
-            .wrap_err("failed to spawn rustup")?;
-        if !result.status.success() {
-            bail!("rustup failed: {:?}", String::from_utf8(result.stderr));
-        }
-    }
+
     Ok(())
 }
 
@@ -289,23 +280,24 @@ async fn build_target(
 ) -> Result<BuildResult> {
     let mut rustflags = None;
 
-    let output = match mode {
+    let init = Command::new("cargo")
+        .args(["init", "--lib", "--name", "target-test"])
+        .current_dir(tmpdir)
+        .output()
+        .await
+        .wrap_err("spawning cargo init")?;
+    if !init.status.success() {
+        bail!("init failed: {}", String::from_utf8(init.stderr)?);
+    }
+
+    let librs = tmpdir.join("src").join("lib.rs");
+    std::fs::write(&librs, "#![no_std]\n")
+        .wrap_err_with(|| format!("writing to {}", librs.display()))?;
+
+    let mut cmd = Command::new("cargo");
+
+    match mode {
         BuildMode::Core => {
-            let init = Command::new("cargo")
-                .args(["init", "--lib", "--name", "target-test"])
-                .current_dir(tmpdir)
-                .output()
-                .await
-                .wrap_err("spawning cargo init")?;
-            if !init.status.success() {
-                bail!("init failed: {}", String::from_utf8(init.stderr)?);
-            }
-
-            let librs = tmpdir.join("src").join("lib.rs");
-            std::fs::write(&librs, "#![no_std]\n")
-                .wrap_err_with(|| format!("writing to {}", librs.display()))?;
-
-            let mut cmd = Command::new("cargo");
             cmd.arg(format!("+{toolchain}"))
                 .args(["build", "-Zbuild-std=core", "--release"])
                 .args(["--target", target]);
@@ -319,22 +311,19 @@ async fn build_target(
                 cmd.env("RUSTFLAGS", &flags);
                 rustflags = Some(flags);
             }
-
-            cmd.current_dir(tmpdir)
-                .output()
-                .await
-                .wrap_err("spawning cargo build")?
         }
-        BuildMode::MiriStd => Command::new("cargo")
-            .arg(format!("+{toolchain}"))
-            .args(["miri", "setup"])
-            .args(["--target", target])
-            .current_dir(tmpdir)
-            .env("MIRI_SYSROOT", tmpdir)
-            .output()
-            .await
-            .wrap_err("spawning cargo build")?,
+        BuildMode::Std => {
+            cmd.arg(format!("+{toolchain}"))
+                .args(["check", "-Zbuild-std"])
+                .args(["--target", target]);
+        }
     };
+
+    let output = cmd
+        .current_dir(tmpdir)
+        .output()
+        .await
+        .wrap_err("spawning cargo build")?;
 
     let stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
 
