@@ -314,8 +314,18 @@ async fn build_target(
         }
         BuildMode::Std => {
             cmd.arg(format!("+{toolchain}"))
-                .args(["check", "-Zbuild-std"])
+                .args(["build", "-Zbuild-std", "--release"])
                 .args(["--target", target]);
+
+            let extra_flags = CUSTOM_CORE_FLAGS
+                .iter()
+                .find(|flags| flags.target == target);
+
+            if let Some(extra_flags) = extra_flags {
+                let flags = extra_flags.flags.join(" ");
+                cmd.env("RUSTFLAGS", &flags);
+                rustflags = Some(flags);
+            }
         }
     };
 
