@@ -2,6 +2,7 @@ use std::{
     fmt::{Debug, Display},
     num::NonZeroUsize,
     path::Path,
+    process::Output,
     time::{Duration, Instant, SystemTime},
 };
 
@@ -233,14 +234,9 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMo
 
     let start_time = Instant::now();
 
-    let result = build_target(
-        tmpdir.path(),
-        &Toolchain::from_nightly(nightly),
-        target,
-        mode,
-    )
-    .await
-    .wrap_err("running build")?;
+    let result = build_target(tmpdir.path(), &Toolchain::from_nightly(nightly), target)
+        .await
+        .wrap_err("running build")?;
 
     db.insert(FullBuildInfo {
         nightly: nightly.into(),
@@ -272,16 +268,19 @@ struct BuildResult {
 }
 
 /// Build a target core in a temporary directory and see whether it passes or not.
-async fn build_target(
-    tmpdir: &Path,
-    toolchain: &Toolchain,
-    target: &str,
-    mode: BuildMode,
-) -> Result<BuildResult> {
+async fn build_target(tmpdir: &Path, toolchain: &Toolchain, target: &str) -> Result<BuildResult> {
     let mut rustflags = None;
 
     let init = Command::new("cargo")
-        .args(["init", "--lib", "--name", "target-test"])
+        .arg(format!("+{toolchain}"))
+        .args([
+            "init",
+            "--lib",
+            "--name",
+            "target-test",
+            "--edition",
+            "2015",
+        ])
         .current_dir(tmpdir)
         .output()
         .await
@@ -294,51 +293,58 @@ async fn build_target(
     std::fs::write(&librs, "#![no_std]\n")
         .wrap_err_with(|| format!("writing to {}", librs.display()))?;
 
-    let mut cmd = Command::new("cargo");
+    async fn run(
+        toolchain: &Toolchain,
+        target: &str,
+        rustflags: &mut Option<String>,
+        tmpdir: &Path,
+        build_std: &str,
+    ) -> Result<Output> {
+        let mut cmd = Command::new("cargo");
+        cmd.arg(format!("+{toolchain}"))
+            .args(["build", "--release", "-j1"])
+            .arg(build_std)
+            .args(["--target", target]);
 
-    match mode {
-        BuildMode::Core => {
-            cmd.arg(format!("+{toolchain}"))
-                .args(["build", "-Zbuild-std=core", "--release", "-j1"])
-                .args(["--target", target]);
+        let extra_flags = CUSTOM_CORE_FLAGS
+            .iter()
+            .find(|flags| flags.target == target);
 
-            let extra_flags = CUSTOM_CORE_FLAGS
-                .iter()
-                .find(|flags| flags.target == target);
-
-            if let Some(extra_flags) = extra_flags {
-                let flags = extra_flags.flags.join(" ");
-                cmd.env("RUSTFLAGS", &flags);
-                rustflags = Some(flags);
-            }
+        if let Some(extra_flags) = extra_flags {
+            let flags = extra_flags.flags.join(" ");
+            cmd.env("RUSTFLAGS", &flags);
+            *rustflags = Some(flags);
         }
-        BuildMode::Std => {
-            cmd.arg(format!("+{toolchain}"))
-                .args(["build", "-Zbuild-std", "--release", "-j1"])
-                .args(["--target", target]);
 
-            let extra_flags = CUSTOM_CORE_FLAGS
-                .iter()
-                .find(|flags| flags.target == target);
+        cmd.current_dir(tmpdir)
+            .output()
+            .await
+            .wrap_err("spawning cargo build")
+    }
 
-            if let Some(extra_flags) = extra_flags {
-                let flags = extra_flags.flags.join(" ");
-                cmd.env("RUSTFLAGS", &flags);
-                rustflags = Some(flags);
-            }
-        }
-    };
-
-    let output = cmd
-        .current_dir(tmpdir)
-        .output()
-        .await
-        .wrap_err("spawning cargo build")?;
-
-    let stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
+    let mut output = run(&toolchain, target, &mut rustflags, tmpdir, "-Zbuild-std").await?;
+    let mut stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
 
     let status = if output.status.success() {
         Status::Pass
+    // older cargo (before 2024-12-15) is clueless about std support
+    } else if stderr.contains("building std is not supported") {
+        info!("Retrying build because std is not supported");
+        output = run(
+            &toolchain,
+            target,
+            &mut rustflags,
+            tmpdir,
+            "-Zbuild-std=core",
+        )
+        .await?;
+        stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
+
+        if output.status.success() {
+            Status::Pass
+        } else {
+            Status::Error
+        }
     } else {
         Status::Error
     };
