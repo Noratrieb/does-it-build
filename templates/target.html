@@ -23,12 +23,13 @@
       codegen/linking of core works, but does not check whether std builds.
     </p>
     <p>
-      std is being built with <code>cargo check -Zbuild-std</code>. If a target
-      does not support std, the std column represents core/alloc. This checks
-      that std checks (on targets that have it) but does not check whether
-      codegen/linking works.
-
-      For older builds, <code>cargo miri setup</code> was used instead.
+      The build is performned with
+      <code>cargo build --release -Zbuild-std</code> for a library crate. This
+      checks whether everything builds successfully (excluding binary linking,
+      which often requires complex toolchains). For no-std targets, Cargo's
+      build-std logic is used for figuring out whether to build std or not. On
+      older targets (older than November 2024) this does not always work
+      reliably, so some failed std builds there are simply no-std targets.
     </p>
     {% if showing_failures %}
     <p>
@@ -42,21 +43,12 @@
     <table>
       <tr>
         <th>nightly</th>
-        <th>core<br />codegen</th>
-        <th>std<br />check</th>
+        <th>std<br />build</th>
       </tr>
       {% for build in builds %}
       <tr>
         <td><a href="/nightly?nightly={{build.0}}">{{ build.0 }}</a></td>
-        {% match build.1 %} {% when Some with (build) %}
-        <td class="build-cell">
-          <a class="build-info-a" href="{{ build.link() }}">
-            {{ build.status.to_emoji() }}
-          </a>
-        </td>
-        {% when None %}
-        <td class="missing"></td>
-        {% endmatch %} {% match build.2 %} {% when Some with (build) %}
+        {% match build.2 %} {% when Some with (build) %}
         <td class="build-cell">
           <a class="build-info-a" href="{{ build.link() }}">
             <span> {{ build.status.to_emoji() }} </span>

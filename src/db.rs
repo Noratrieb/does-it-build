@@ -17,16 +17,13 @@ pub static MIGRATOR: Migrator = sqlx::migrate!();
 #[derive(Debug, Clone, Copy, sqlx::Type, Serialize, PartialEq, Eq, Hash)]
 #[sqlx(rename_all = "kebab-case")]
 pub enum BuildMode {
-    /// `build -Zbuild-std=core`
-    Core,
-    /// `check -Zbuild-std`
+    /// `build --release -Zbuild-std`
     Std,
 }
 
 impl Display for BuildMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Core => f.write_str("core"),
             Self::Std => f.write_str("std"),
         }
     }

@@ -44,14 +44,14 @@ impl<'de> serde::Deserialize<'de> for LegacyBuildMode {
     {
         let s = String::deserialize(deserializer)?;
         match s.as_str() {
-            "core" => Ok(LegacyBuildMode(BuildMode::Core)),
+            "core" => Ok(LegacyBuildMode(BuildMode::Std)),
             "std" => Ok(LegacyBuildMode(BuildMode::Std)),
             // This mode used to be called "miri-std" but it has been renamed to "std" using build-std.
             // Allow the old value to keep links working but map it to std.
             "miri-std" => Ok(LegacyBuildMode(BuildMode::Std)),
-            _ => Err(serde::de::Error::custom(format!(
-                "invalid build mode, expected 'core', 'std', or 'miri-std'"
-            ))),
+            _ => Err(serde::de::Error::custom(
+                "invalid build mode, expected 'core', 'std', or 'miri-std'".to_owned(),
+            )),
         }
     }
 }
@@ -85,7 +85,7 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
         .build_status_full(
             &query.nightly,
             &query.target,
-            query.mode.map(|mode| mode.0).unwrap_or(BuildMode::Core),
+            query.mode.map(|mode| mode.0).unwrap_or(BuildMode::Std),
         )
         .await
     {
@@ -144,26 +144,14 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
 
     match state.db.history_for_target(&query.target).await {
         Ok(builds) => {
-            let latest_core = builds
+            let latest_std = builds
                 .iter()
-                .filter(|build| build.mode == BuildMode::Core)
-                .max_by_key(|elem| elem.nightly.clone());
-            let latest_miri = builds
-                .iter()
-                .filter(|build| build.mode == BuildMode::Core)
+                .filter(|build| build.mode == BuildMode::Std)
                 .max_by_key(|elem| elem.nightly.clone());
 
-            let status = match (latest_core, latest_miri) {
-                (Some(core), Some(std)) => {
-                    if core.status == Status::Error || std.status == Status::Error {
-                        Status::Error
-                    } else {
-                        Status::Pass
-                    }
-                    .to_string()
-                }
-                (Some(one), None) | (None, Some(one)) => one.status.to_string(),
-                (None, None) => "missing".to_owned(),
+            let status = match latest_std {
+                Some(one) => one.status.to_string(),
+                None => "missing".to_owned(),
             };
 
             let mut builds_grouped =
@@ -171,7 +159,6 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
             for build in builds {
                 let v = builds_grouped.entry(build.nightly.clone()).or_default();
                 match build.mode {
-                    BuildMode::Core => v.0 = Some(build),
                     BuildMode::Std => v.1 = Some(build),
                 }
             }
@@ -217,9 +204,7 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
         nightly: String,
         version: &'static str,
         builds: Vec<(String, Option<BuildInfo>, Option<BuildInfo>)>,
-        core_failures: usize,
         std_failures: usize,
-        core_broken: Option<String>,
         std_broken: Option<String>,
         showing_failures: bool,
     }
@@ -234,17 +219,14 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                 for build in &builds {
                     let v = builds_grouped.entry(build.target.clone()).or_default();
                     match build.mode {
-                        BuildMode::Core => v.0 = Some(build.clone()),
                         BuildMode::Std => v.1 = Some(build.clone()),
                     }
                 }
 
                 let mut std_failures = 0;
-                let mut core_failures = 0;
                 for build in builds {
                     if build.status == Status::Error {
                         match build.mode {
-                            BuildMode::Core => core_failures += 1,
                             BuildMode::Std => std_failures += 1,
                         }
                     }
@@ -260,10 +242,6 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                     .collect::<Vec<_>>();
                 builds.sort_by_cached_key(|build| build.0.clone());
 
-                let core_broken = info
-                    .iter()
-                    .find(|info| info.mode == BuildMode::Core && info.is_broken)
-                    .and_then(|info| info.broken_error.clone());
                 let std_broken = info
                     .iter()
                     .find(|info| info.mode == BuildMode::Std && info.is_broken)
@@ -274,8 +252,6 @@ async fn web_nightly(State(state): State<AppState>, Query(query): Query<NightlyQ
                     version: crate::VERSION,
                     builds,
                     std_failures,
-                    core_failures,
-                    core_broken,
                     std_broken,
                     showing_failures: filter_failures,
                 };

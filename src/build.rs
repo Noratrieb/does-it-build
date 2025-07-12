@@ -322,7 +322,7 @@ async fn build_target(tmpdir: &Path, toolchain: &Toolchain, target: &str) -> Res
             .wrap_err("spawning cargo build")
     }
 
-    let mut output = run(&toolchain, target, &mut rustflags, tmpdir, "-Zbuild-std").await?;
+    let mut output = run(toolchain, target, &mut rustflags, tmpdir, "-Zbuild-std").await?;
     let mut stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
 
     let status = if output.status.success() {
@@ -331,7 +331,7 @@ async fn build_target(tmpdir: &Path, toolchain: &Toolchain, target: &str) -> Res
     } else if stderr.contains("building std is not supported") {
         info!("Retrying build because std is not supported");
         output = run(
-            &toolchain,
+            toolchain,
             target,
             &mut rustflags,
             tmpdir,
