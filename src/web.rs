@@ -326,7 +326,7 @@ async fn index_js() -> impl IntoResponse {
 }
 
 impl Status {
-    fn to_emoji(&self) -> &'static str {
+    fn to_emoji(self) -> &'static str {
         match self {
             Status::Pass => "✅",
             Status::Error => "❌",
