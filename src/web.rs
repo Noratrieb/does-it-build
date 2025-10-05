@@ -8,7 +8,7 @@ use axum::{
     Router,
 };
 use color_eyre::{eyre::Context, Result};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::{error, info};
 
 use crate::db::{BuildInfo, BuildMode, BuildStats, Db, Status};
@@ -323,11 +323,6 @@ async fn index_js() -> impl IntoResponse {
         )],
         include_str!("../static/index.js"),
     )
-}
-
-#[derive(Serialize, Deserialize)]
-struct TriggerBuildBody {
-    nightly: String,
 }
 
 impl Status {
