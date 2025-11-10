@@ -31,6 +31,18 @@
       older targets (older than November 2024) this does not always work
       reliably, so some failed std builds there are simply no-std targets.
     </p>
+    <p>
+      🔔 does-it-build supports sending notifications to target maintainers via GitHub issues.
+      You can add yourself with <a href="{{notification_pr_url}}">a PR</a>.
+    </p>
+    {% if let Some(maintainers) = maintainers %}
+    <p>
+      Maintainers that will receive pings for this target:
+      {% for maintainer in maintainers %}
+      <a href="https://github.com/{{maintainer}}">{{maintainer}}</a>
+      {% endfor %}
+    </p>
+    {% endif %}
     {% if showing_failures %}
     <p>
       <a href="/target?target={{target}}">show all</a>

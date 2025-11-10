@@ -2,3 +2,4 @@
 /targets
 /results
 /db.sqlite*
+/.envrc

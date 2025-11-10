@@ -92,6 +92,22 @@ impl BuildStats {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy, sqlx::Type, Serialize, Deserialize)]
+#[sqlx(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
+pub enum NotificationStatus {
+    Open,
+    Closed,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct NotificationIssue {
+    pub issue_number: i64,
+    pub status: NotificationStatus,
+    pub first_failed_nightly: String,
+    pub target: String,
+}
+
 impl Db {
     pub async fn open(path: &str) -> Result<Self> {
         let db_opts = SqliteConnectOptions::from_str(path)
@@ -279,6 +295,45 @@ impl Db {
             .execute(&self.conn)
             .await
             .wrap_err("inserting finished broken nightly")?;
+        Ok(())
+    }
+
+    pub async fn find_existing_notification(
+        &self,
+        target: &str,
+    ) -> Result<Option<NotificationIssue>> {
+        sqlx::query_as::<_, NotificationIssue>(
+            "SELECT * FROM notification_issues WHERE status = 'open' AND target = ?",
+        )
+        .bind(target)
+        .fetch_optional(&self.conn)
+        .await
+        .wrap_err("finding existing notification")
+    }
+
+    pub async fn insert_notification(&self, notification: NotificationIssue) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO notification_issues\
+            (issue_number, status, first_failed_nightly, target)\
+            VALUES (?, ?, ?, ?)",
+        )
+        .bind(notification.issue_number)
+        .bind(notification.status)
+        .bind(notification.first_failed_nightly)
+        .bind(notification.target)
+        .execute(&self.conn)
+        .await
+        .wrap_err("inserting new notification")?;
+        Ok(())
+    }
+
+    pub async fn finish_notification(&self, issue_number: i64) -> Result<()> {
+        sqlx::query("UPDATE notification_issues SET status = ? WHERE issue_number = ?")
+            .bind(NotificationStatus::Closed)
+            .bind(issue_number)
+            .execute(&self.conn)
+            .await
+            .wrap_err("marking notification as closed")?;
         Ok(())
     }
 }
