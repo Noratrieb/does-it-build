@@ -30,3 +30,6 @@ does-it-build supports sending target maintainer notifications on breakage.
 
 It does this by creating an issue <https://github.com/Noratrieb/does-it-build-notifications> that pings the registered maintainers.
 There is an array in the source code (linked to on the website target page) where people can add or remove themselves.
+
+## License
+Licensed under either of [Apache License, Version 2.0](./LICENSE-APACHE) or [MIT license](./LICENSE-MIT) at your option. 
