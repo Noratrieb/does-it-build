@@ -17,6 +17,7 @@ use tracing::{debug, error, info};
 use crate::{
     db::{BuildMode, Db, FullBuildInfo, Status},
     nightlies::Nightlies,
+    notification::GitHubClient,
 };
 
 struct CustomBuildFlags {
@@ -52,7 +53,7 @@ impl Display for Toolchain {
     }
 }
 
-pub async fn background_builder(db: Db) -> Result<()> {
+pub async fn background_builder(db: Db, github_client: GitHubClient) -> Result<()> {
     if concurrent_jobs() == 0 {
         info!("Suspending background thread since DOES_IT_BUILD_PARALLEL_JOBS=0");
         loop {
@@ -61,7 +62,7 @@ pub async fn background_builder(db: Db) -> Result<()> {
     }
 
     loop {
-        if let Err(err) = background_builder_inner(&db).await {
+        if let Err(err) = background_builder_inner(&db, &github_client).await {
             error!(
                 ?err,
                 "error in background builder, waiting for an hour before retrying: {err}"
@@ -71,7 +72,7 @@ pub async fn background_builder(db: Db) -> Result<()> {
     }
 }
 
-async fn background_builder_inner(db: &Db) -> Result<()> {
+async fn background_builder_inner(db: &Db, github_client: &GitHubClient) -> Result<()> {
     let nightlies = Nightlies::fetch().await.wrap_err("fetching nightlies")?;
     let already_finished = db
         .finished_nightlies()
@@ -82,7 +83,7 @@ async fn background_builder_inner(db: &Db) -> Result<()> {
     match next {
         Some((nightly, mode)) => {
             info!(%nightly, %mode, "Building next nightly");
-            let result = build_every_target_for_toolchain(db, &nightly, mode)
+            let result = build_every_target_for_toolchain(db, &nightly, mode, &github_client)
                 .await
                 .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
             if let Err(err) = result {
@@ -178,6 +179,7 @@ pub async fn build_every_target_for_toolchain(
     db: &Db,
     nightly: &str,
     mode: BuildMode,
+    github_client: &GitHubClient,
 ) -> Result<()> {
     if db.is_nightly_finished(nightly, mode).await? {
         debug!("Nightly is already finished, not trying again");
@@ -194,7 +196,7 @@ pub async fn build_every_target_for_toolchain(
     let results = futures::stream::iter(
         targets
             .iter()
-            .map(|target| build_single_target(db, nightly, target, mode)),
+            .map(|target| build_single_target(db, nightly, target, mode, github_client)),
     )
     .buffer_unordered(concurrent_jobs())
     .collect::<Vec<Result<()>>>()
@@ -204,7 +206,7 @@ pub async fn build_every_target_for_toolchain(
     }
 
     for target in targets {
-        build_single_target(db, nightly, &target, mode)
+        build_single_target(db, nightly, &target, mode, github_client)
             .await
             .wrap_err_with(|| format!("building target {target} for toolchain {toolchain}"))?;
     }
@@ -217,8 +219,14 @@ pub async fn build_every_target_for_toolchain(
     Ok(())
 }
 
-#[tracing::instrument(skip(db))]
-async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMode) -> Result<()> {
+#[tracing::instrument(skip(db, github_client))]
+async fn build_single_target(
+    db: &Db,
+    nightly: &str,
+    target: &str,
+    mode: BuildMode,
+    github_client: &GitHubClient,
+) -> Result<()> {
     let existing = db
         .build_status_full(nightly, target, mode)
         .await
@@ -238,7 +246,7 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMo
         .await
         .wrap_err("running build")?;
 
-    db.insert(FullBuildInfo {
+    let full_build_info = FullBuildInfo {
         nightly: nightly.into(),
         target: target.into(),
         status: result.status,
@@ -255,8 +263,14 @@ async fn build_single_target(db: &Db, nightly: &str, target: &str, mode: BuildMo
         ),
         does_it_build_version: Some(crate::VERSION_SHORT.into()),
         build_duration_ms: Some(start_time.elapsed().as_millis().try_into().unwrap()),
-    })
-    .await?;
+    };
+
+    let result = crate::notification::notify_build(github_client, db, &full_build_info).await;
+    if let Err(err) = result {
+        error!(?err, "Failed to send build notification");
+    }
+
+    db.insert(full_build_info).await?;
 
     Ok(())
 }

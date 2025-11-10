@@ -11,7 +11,10 @@ use color_eyre::{eyre::Context, Result};
 use serde::Deserialize;
 use tracing::{error, info};
 
-use crate::db::{BuildInfo, BuildMode, BuildStats, Db, Status};
+use crate::{
+    db::{BuildInfo, BuildMode, BuildStats, Db, Status},
+    notification,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -138,6 +141,8 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
         version: &'static str,
         builds: Vec<(String, Option<BuildInfo>, Option<BuildInfo>)>,
         showing_failures: bool,
+        notification_pr_url: String,
+        maintainers: Option<&'static [&'static str]>,
     }
 
     let filter_failures = query.failures.unwrap_or(false);
@@ -173,12 +178,16 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
                 .collect::<Vec<_>>();
             builds.sort_by_cached_key(|build| Reverse(build.0.clone()));
 
+            let maintainers = notification::maintainers_for_target(&query.target);
+
             let page = TargetPage {
                 status,
                 target: query.target,
                 version: crate::VERSION,
                 builds,
                 showing_failures: filter_failures,
+                notification_pr_url: notification::notification_pr_url(),
+                maintainers,
             };
 
             Html(page.render().unwrap()).into_response()
