@@ -8,6 +8,7 @@ askama = "0.14.0"
 axum = { version = "0.8.6", features = ["macros"] }
 color-eyre = "0.6.3"
 futures = "0.3.30"
+jiff = "0.2.16"
 jsonwebtoken = { version = "9.3.1", features = [] }
 octocrab = "0.47.1"
 reqwest = { version = "0.12.7", features = [

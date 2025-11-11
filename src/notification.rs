@@ -84,8 +84,6 @@ pub async fn notify_build_failure(
         return Ok(());
     };
 
-    info!("Creating issue for target {target}, notifying {notify_usernames:?}");
-
     let issue = db.find_existing_notification(target).await?;
 
     let url = format!(
@@ -93,14 +91,25 @@ pub async fn notify_build_failure(
     );
 
     if let Some(issue) = issue {
-        // An existing issue, send a comment.
+        // An existing issue, send a comment if it's been a month since the last update.
 
-        github_client
-            .issues()
-            .create_comment(
-                issue.issue_number as u64,
-                format!(
-                    "💥 The target {target} still fails to build on the nightly {nightly}!
+        if issue.last_update_date.is_none_or(|last_update_date| {
+            jiff::Timestamp::from_millisecond(last_update_date).is_ok_and(|last_update_date| {
+                jiff::Timestamp::now()
+                    .since(last_update_date)
+                    .is_ok_and(|diff| diff.get_months() > 0)
+            })
+        }) {
+            info!(
+                "Sending update for {target}, since enough time has elapsed since the last update"
+            );
+
+            github_client
+                .issues()
+                .create_comment(
+                    issue.issue_number as u64,
+                    format!(
+                        "💥 The target {target} still fails to build on the nightly {nightly}!
 
 <{url}>
 
@@ -111,13 +120,25 @@ pub async fn notify_build_failure(
 ```
 
 </details>
+
+This update is sent after a month of inactivity.
 "
-                ),
-            )
-            .await
-            .wrap_err("creating update comment")?;
+                    ),
+                )
+                .await
+                .wrap_err("creating update comment")?;
+
+            db.set_notification_last_update(issue.issue_number, jiff::Timestamp::now())
+                .await
+                .wrap_err("updating last_update_date in DB")?;
+        } else {
+            info!("Not sending update for {target}, since not enough time has elapsed since the last one");
+        }
+
         return Ok(());
     }
+
+    info!("Creating issue for target {target}, notifying {notify_usernames:?}");
 
     // Ensure the labels exist.
     let label = github_client.issues().get_label(target).await;
@@ -176,6 +197,7 @@ This issue will be closed automatically when this target works again!"
         issue_number: issue.number as i64,
         status: NotificationStatus::Open,
         target: target.into(),
+        last_update_date: Some(jiff::Timestamp::now().as_millisecond()),
     })
     .await
     .wrap_err("inserting issue into DB")?;

@@ -106,6 +106,7 @@ pub struct NotificationIssue {
     pub status: NotificationStatus,
     pub first_failed_nightly: String,
     pub target: String,
+    pub last_update_date: Option<i64>,
 }
 
 impl Db {
@@ -314,13 +315,14 @@ impl Db {
     pub async fn insert_notification(&self, notification: NotificationIssue) -> Result<()> {
         sqlx::query(
             "INSERT INTO notification_issues\
-            (issue_number, status, first_failed_nightly, target)\
-            VALUES (?, ?, ?, ?)",
+            (issue_number, status, first_failed_nightly, target, last_update_date)\
+            VALUES (?, ?, ?, ?, ?)",
         )
         .bind(notification.issue_number)
         .bind(notification.status)
         .bind(notification.first_failed_nightly)
         .bind(notification.target)
+        .bind(notification.last_update_date)
         .execute(&self.conn)
         .await
         .wrap_err("inserting new notification")?;
@@ -330,6 +332,20 @@ impl Db {
     pub async fn finish_notification(&self, issue_number: i64) -> Result<()> {
         sqlx::query("UPDATE notification_issues SET status = ? WHERE issue_number = ?")
             .bind(NotificationStatus::Closed)
+            .bind(issue_number)
+            .execute(&self.conn)
+            .await
+            .wrap_err("marking notification as closed")?;
+        Ok(())
+    }
+
+    pub async fn set_notification_last_update(
+        &self,
+        issue_number: i64,
+        last_update: jiff::Timestamp,
+    ) -> Result<()> {
+        sqlx::query("UPDATE notification_issues SET last_update_date = ? WHERE issue_number = ?")
+            .bind(last_update.as_millisecond())
             .bind(issue_number)
             .execute(&self.conn)
             .await
