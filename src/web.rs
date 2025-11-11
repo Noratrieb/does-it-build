@@ -286,6 +286,7 @@ async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
             nightlies: Vec<String>,
             version: &'static str,
             build_count: BuildStats,
+            notification_pr_url: String,
         }
 
         let targets = state.db.target_list().await?;
@@ -297,6 +298,7 @@ async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
             nightlies,
             version: crate::VERSION,
             build_count,
+            notification_pr_url: notification::notification_pr_url(),
         };
 
         Ok(Html(page.render().unwrap()).into_response())

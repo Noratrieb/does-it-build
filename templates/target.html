@@ -5,11 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{target}} build history</title>
     <link rel="stylesheet" href="/index.css" />
-    <style>
-      .build-indicator-big {
-        padding: 10px;
-      }
-    </style>
   </head>
   <body>
     <h1>Target build history for {{target}}</h1>
@@ -33,7 +28,7 @@
     </p>
     <p>
       🔔 does-it-build supports sending notifications to target maintainers via GitHub issues.
-      You can add yourself with <a href="{{notification_pr_url}}">a PR</a>.
+      You can add yourself with <a href="{{notification_pr_url}}">a PR</a>. 🔔
     </p>
     {% if let Some(maintainers) = maintainers %}
     <p>

@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -6,18 +6,15 @@
     <title>Build {{nightly}} {{target}}</title>
     <link rel="stylesheet" href="/index.css" />
     <script type="module" defer src="index.js"></script>
-    <style>
-      .build-indicator-big {
-        padding: 10px;
-      }
-    </style>
   </head>
   <body>
-    <h1>Build results for nightly-{{nightly}} target {{target}} {{mode}}</h1>
+    <h1>
+      Build results for
+      <a href="/nightly?nightly={{nightly}}">nightly-{{nightly}}</a>, target
+      <a href="/target?target={{target}}">{{target}}</a> ({{mode}})
+    </h1>
     <a href="/">Home</a>
-    <div style="margin-top: 20px" class="{{status}} build-indicator-big">
-      {{status}}
-    </div>
+    <div class="{{status}} build-indicator-big">{{status}}</div>
     {% if let Some(rustflags) = rustflags %}
     <p>
       Using rustflags: <b><code>{{rustflags}}</code></b>
