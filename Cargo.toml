@@ -5,26 +5,29 @@ edition = "2021"
 
 [dependencies]
 askama = "0.14.0"
-axum = { version = "0.8.6", features = ["macros"] }
+axum = { version = "0.8.6", default-features = false, features = [
+    "http1",
+    "matched-path",
+    "query",
+    "tokio",
+    "tower-log",
+    "tracing",
+    "macros",
+] }
 color-eyre = "0.6.3"
 futures = "0.3.30"
 jiff = "0.2.16"
-jsonwebtoken = { version = "9.3.1", features = [] }
+jsonwebtoken = { version = "9.3.1" }
 octocrab = "0.47.1"
 reqwest = { version = "0.12.7", features = [
     "rustls-tls",
+    "http2",
 ], default-features = false }
 serde = { version = "1.0.210", features = ["derive"] }
-sqlx = { version = "0.8.2", features = [
-    "macros",
-    "migrate",
-    "runtime-tokio",
-    "sqlite",
-] }
+sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
 tempfile = "3.12.0"
-time = { version = "0.3.36", features = ["formatting", "macros", "parsing"] }
 tokio = { version = "1.40.0", features = ["full"] }
-tracing = "0.1.40"
+tracing = { version = "0.1.40", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
 [build-dependencies]

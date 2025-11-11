@@ -101,14 +101,10 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
                 rustflags: build.rustflags,
                 version: crate::VERSION,
                 status: build.status,
-                build_date: build.build_date.map(|build_date| {
-                    time::OffsetDateTime::from_unix_timestamp_nanos(build_date as i128 * 1000000)
-                        .map(|build_date| {
-                            build_date
-                                .format(&time::format_description::well_known::Rfc3339)
-                                .unwrap()
-                        })
-                        .unwrap()
+                build_date: build.build_date.and_then(|build_date| {
+                    jiff::Timestamp::from_millisecond(build_date)
+                        .ok()
+                        .map(|build_date| build_date.to_string())
                 }),
                 build_duration_s: build
                     .build_duration_ms
