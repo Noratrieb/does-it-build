@@ -83,7 +83,7 @@ async fn background_builder_inner(db: &Db, github_client: &GitHubClient) -> Resu
     match next {
         Some((nightly, mode)) => {
             info!(%nightly, %mode, "Building next nightly");
-            let result = build_every_target_for_toolchain(db, &nightly, mode, &github_client)
+            let result = build_every_target_for_toolchain(db, &nightly, mode, github_client)
                 .await
                 .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
             if let Err(err) = result {

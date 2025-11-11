@@ -247,7 +247,7 @@ pub async fn notify_build_pass(
             .await
             .wrap_err("closing issue")?;
 
-        db.finish_notification(issue.issue_number as i64).await?;
+        db.finish_notification(issue.issue_number).await?;
     }
 
     Ok(())
