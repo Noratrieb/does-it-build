@@ -7,7 +7,24 @@ use crate::db::{Db, FullBuildInfo, NotificationIssue, NotificationStatus, Status
 
 pub const TABLE_FILE: &str = file!();
 pub const TABLE_LINE: u32 = line!() + 1;
-const TARGET_NOTIFICATIONS: &[(&str, &[&str])] = &[("armv7-sony-vita-newlibeabihf", &["pheki"])];
+const TARGET_NOTIFICATIONS: &[(&str, &[&str])] = &[
+    ("aarch64-unknown-linux-musl", &["Gelbpunkt", "famfo"]),
+    (
+        "aarch64_be-unknown-linux-musl",
+        &["Gelbpunkt", "neuschaefer"],
+    ),
+    ("aarch64_be-unknown-none-softfloat", &["Gelbpunkt"]),
+    ("armv7-sony-vita-newlibeabihf", &["pheki"]),
+    ("mips64-unknown-linux-muslabi64", &["Gelbpunkt"]),
+    (
+        "powerpc64-unknown-linux-musl",
+        &["Gelbpunkt", "famfo", "neuschaefer"],
+    ),
+    (
+        "powerpc64le-unknown-linux-musl",
+        &["Gelbpunkt", "famfo", "neuschaefer"],
+    ),
+];
 
 pub fn notification_pr_url() -> String {
     format!("https://github.com/Noratrieb/does-it-build/blob/main/{TABLE_FILE}#L{TABLE_LINE}")
