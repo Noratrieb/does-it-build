@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -63,8 +63,11 @@
         <td><a href="/nightly?nightly={{build.0}}">{{ build.0 }}</a></td>
         {% match build.2 %} {% when Some with (build) %}
         <td class="build-cell">
-          <a class="build-info-a" href="{{ build.link() }}">
-            <span> {{ build.status.to_emoji() }} </span>
+          <a href="{{ build.link() }}" class="build-details-link">
+            <span class="build-details-emoji">
+              {{ build.status.to_emoji() }}
+            </span>
+            <span class="build-details-text">[details]</span>
           </a>
         </td>
         {% when None %}
