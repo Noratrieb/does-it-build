@@ -19,9 +19,10 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub db: Db,
+    notification_repo: String,
 }
 
-pub async fn webserver(db: Db) -> Result<()> {
+pub async fn webserver(db: Db, notification_repo: String) -> Result<()> {
     let app = Router::new()
         .route("/", get(web_root))
         .route("/build", get(web_build))
@@ -29,7 +30,10 @@ pub async fn webserver(db: Db) -> Result<()> {
         .route("/nightly", get(web_nightly))
         .route("/index.css", get(index_css))
         .route("/index.js", get(index_js))
-        .with_state(AppState { db });
+        .with_state(AppState {
+            db,
+            notification_repo,
+        });
 
     info!("Serving website on port 3000 (commit {})", crate::VERSION);
 
@@ -80,6 +84,7 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
         status: Status,
         build_date: Option<String>,
         build_duration_s: Option<f32>,
+        notification_pr_url: String,
         does_it_build_version: Option<String>,
     }
 
@@ -109,6 +114,7 @@ async fn web_build(State(state): State<AppState>, Query(query): Query<BuildQuery
                 build_duration_s: build
                     .build_duration_ms
                     .map(|build_duration_ms| (build_duration_ms as f32) / 1000.0),
+                notification_pr_url: notification::notification_pr_url(),
                 does_it_build_version: build.does_it_build_version,
             };
             Html(page.render().unwrap()).into_response()
@@ -139,6 +145,8 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
         showing_failures: bool,
         notification_pr_url: String,
         maintainers: Option<&'static [&'static str]>,
+        open_notification_issue_number: Option<i64>,
+        notification_repo: String,
     }
 
     let filter_failures = query.failures.unwrap_or(false);
@@ -176,6 +184,14 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
 
             let maintainers = notification::maintainers_for_target(&query.target);
 
+            let notification_issue = state
+                .db
+                .find_existing_notification(&query.target)
+                .await
+                .map_err(|err| {
+                    error!(?err, "Error finding existing notification");
+                });
+
             let page = TargetPage {
                 status,
                 target: query.target,
@@ -184,6 +200,11 @@ async fn web_target(State(state): State<AppState>, Query(query): Query<TargetQue
                 showing_failures: filter_failures,
                 notification_pr_url: notification::notification_pr_url(),
                 maintainers,
+                open_notification_issue_number: notification_issue
+                    .ok()
+                    .flatten()
+                    .map(|issue| issue.issue_number),
+                notification_repo: state.notification_repo,
             };
 
             Html(page.render().unwrap()).into_response()

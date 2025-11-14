@@ -14,6 +14,11 @@
       <a href="/target?target={{target}}">{{target}}</a> ({{mode}})
     </h1>
     <a href="/">Home</a>
+    <p>
+      🔔 does-it-build supports sending notifications to target maintainers via
+      GitHub issues. You can add yourself with
+      <a href="{{notification_pr_url}}">a PR</a>. 🔔
+    </p>
     <div class="{{status}} build-indicator-big">{{status}}</div>
     {% if let Some(rustflags) = rustflags %}
     <p>

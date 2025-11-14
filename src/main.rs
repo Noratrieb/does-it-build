@@ -53,8 +53,10 @@ async fn main_inner() -> Result<()> {
     )
     .await?;
 
+    let notification_repo = format!("https://github.com/{github_owner}/{github_repo}");
+
     let builder = build::background_builder(db.clone(), github_client);
-    let server = web::webserver(db);
+    let server = web::webserver(db, notification_repo);
 
     tokio::select! {
         result = builder => {

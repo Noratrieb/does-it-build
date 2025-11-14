@@ -38,6 +38,12 @@
       {% endfor %}
     </p>
     {% endif %}
+    {% if let Some(issue) = open_notification_issue_number %}
+    <p>
+     There is currently an open issue with a maintainer ping:
+      <a href="{{notification_repo}}/issues/{{issue}}">{{notification_repo}}/issues/{{issue}}</a>
+    </p>
+    {% endif %}
     {% if showing_failures %}
     <p>
       <a href="/target?target={{target}}">show all</a>
