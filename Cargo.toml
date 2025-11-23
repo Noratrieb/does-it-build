@@ -14,7 +14,6 @@ axum = { version = "0.8.6", default-features = false, features = [
     "tracing",
     "macros",
 ] }
-color-eyre = "0.6.3"
 futures = "0.3.30"
 jiff = "0.2.16"
 jsonwebtoken = { version = "9.3.1" }
@@ -23,6 +22,7 @@ reqwest = { version = "0.12.7", features = [
     "rustls-tls",
     "http2",
 ], default-features = false }
+rootcause = "0.10.0"
 serde = { version = "1.0.210", features = ["derive"] }
 sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
 tempfile = "3.12.0"

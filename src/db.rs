@@ -1,11 +1,10 @@
 use std::{fmt::Display, str::FromStr};
 
-use color_eyre::{
-    eyre::{bail, Context},
-    Result,
-};
+use rootcause::{prelude::ResultExt, report};
 use serde::{Deserialize, Serialize};
 use sqlx::{migrate::Migrator, sqlite::SqliteConnectOptions, Pool, Sqlite};
+
+use crate::Result;
 
 #[derive(Clone)]
 pub struct Db {
@@ -112,12 +111,13 @@ pub struct NotificationIssue {
 impl Db {
     pub async fn open(path: &str) -> Result<Self> {
         let db_opts = SqliteConnectOptions::from_str(path)
-            .wrap_err("parsing database URL")?
+            .context("parsing database URL")
+            .attach(format!("url: {path}"))?
             .create_if_missing(true);
 
         let conn = Pool::connect_with(db_opts)
             .await
-            .wrap_err_with(|| format!("opening db from `{path}`"))?;
+            .context_with(|| format!("opening db from `{path}`"))?;
         Ok(Self { conn })
     }
 
@@ -137,38 +137,44 @@ impl Db {
         .bind(info.build_duration_ms)
         .execute(&self.conn)
         .await
-        .wrap_err("inserting build info into database")?;
+        .context("inserting build info into database")?;
         Ok(())
     }
 
     pub async fn history_for_target(&self, target: &str) -> Result<Vec<BuildInfo>> {
-        sqlx::query_as::<_, BuildInfo>(
+        let history = sqlx::query_as::<_, BuildInfo>(
             "SELECT nightly, target, status, mode FROM build_info WHERE target = ?",
         )
         .bind(target)
         .fetch_all(&self.conn)
         .await
-        .wrap_err("getting history for single target")
+        .context("getting history for single target")
+        .attach(format!("target: {target}"))?;
+        Ok(history)
     }
 
     pub async fn history_for_nightly(&self, nightly: &str) -> Result<Vec<BuildInfo>> {
-        sqlx::query_as::<_, BuildInfo>(
+        let history = sqlx::query_as::<_, BuildInfo>(
             "SELECT nightly, target, status, mode FROM build_info WHERE nightly = ?",
         )
         .bind(nightly)
         .fetch_all(&self.conn)
         .await
-        .wrap_err("getting history for single nightly")
+        .context("getting history for single nightly")
+        .attach(format!("nightly: {nightly}"))?;
+        Ok(history)
     }
 
     pub async fn nightly_info(&self, nightly: &str) -> Result<Vec<FinishedNightlyWithBroken>> {
-        sqlx::query_as::<_, FinishedNightlyWithBroken>(
+        let info = sqlx::query_as::<_, FinishedNightlyWithBroken>(
             "SELECT nightly, mode, is_broken, broken_error FROM finished_nightly WHERE nightly = ?",
         )
         .bind(nightly)
         .fetch_all(&self.conn)
         .await
-        .wrap_err("getting finished_nightly for single nightly")
+        .context("getting finished_nightly for single nightly")
+        .attach(format!("nightly: {nightly}"))?;
+        Ok(info)
     }
 
     pub async fn target_list(&self) -> Result<Vec<String>> {
@@ -177,11 +183,14 @@ impl Db {
             target: String,
         }
 
-        sqlx::query_as::<_, TargetName>("SELECT DISTINCT target FROM build_info ORDER BY target")
-            .fetch_all(&self.conn)
-            .await
-            .wrap_err("getting list of all targets")
-            .map(|elems| elems.into_iter().map(|elem| elem.target).collect())
+        let list = sqlx::query_as::<_, TargetName>(
+            "SELECT DISTINCT target FROM build_info ORDER BY target",
+        )
+        .fetch_all(&self.conn)
+        .await
+        .context("getting list of all targets")?;
+
+        Ok(list.into_iter().map(|elem| elem.target).collect())
     }
 
     pub async fn nightly_list(&self) -> Result<Vec<String>> {
@@ -190,13 +199,14 @@ impl Db {
             nightly: String,
         }
 
-        sqlx::query_as::<_, NightlyName>(
+        let list = sqlx::query_as::<_, NightlyName>(
             "SELECT DISTINCT nightly FROM build_info ORDER BY nightly DESC",
         )
         .fetch_all(&self.conn)
         .await
-        .wrap_err("getting list of all targets")
-        .map(|elems| elems.into_iter().map(|elem| elem.nightly).collect())
+        .context("getting list of all nightlies")?;
+
+        Ok(list.into_iter().map(|elem| elem.nightly).collect())
     }
 
     pub async fn build_count(&self) -> Result<BuildStats> {
@@ -211,7 +221,7 @@ impl Db {
         )
         .fetch_all(&self.conn)
         .await
-        .wrap_err("getting list of all targets")?;
+        .context("getting total count of builds")?;
 
         let count = |status| {
             results
@@ -242,7 +252,8 @@ impl Db {
         .bind(mode)
         .fetch_all(&self.conn)
         .await
-        .wrap_err("getting build status from DB")?;
+        .context("getting build status from DB")
+        .attach(format!("nightly: {nightly}, target: {target}"))?;
         Ok(result.first().cloned())
     }
 
@@ -251,7 +262,7 @@ impl Db {
             sqlx::query_as::<_, FinishedNightly>("SELECT nightly, mode from finished_nightly")
                 .fetch_all(&self.conn)
                 .await
-                .wrap_err("fetching finished nightlies")?;
+                .context("getting finished nightlies")?;
 
         Ok(result)
     }
@@ -264,10 +275,10 @@ impl Db {
         .bind(mode)
         .fetch_all(&self.conn)
         .await
-        .wrap_err("checking whether a nightly is finished")?;
+        .context("checking whether a nightly is finished")?;
 
         if result.len() > 1 {
-            bail!("found more than one result for {nightly} {mode}");
+            return Err(report!("found more than one result for {nightly} {mode}"));
         }
 
         Ok(result.len() == 1)
@@ -279,7 +290,7 @@ impl Db {
             .bind(mode)
             .execute(&self.conn)
             .await
-            .wrap_err("inserting finished nightly")?;
+            .context("inserting finished nightly")?;
         Ok(())
     }
 
@@ -295,7 +306,7 @@ impl Db {
             .bind(error)
             .execute(&self.conn)
             .await
-            .wrap_err("inserting finished broken nightly")?;
+            .context("inserting finished broken nightly")?;
         Ok(())
     }
 
@@ -303,13 +314,14 @@ impl Db {
         &self,
         target: &str,
     ) -> Result<Option<NotificationIssue>> {
-        sqlx::query_as::<_, NotificationIssue>(
+        let notification = sqlx::query_as::<_, NotificationIssue>(
             "SELECT * FROM notification_issues WHERE status = 'open' AND target = ?",
         )
         .bind(target)
         .fetch_optional(&self.conn)
         .await
-        .wrap_err("finding existing notification")
+        .context("finding existing notification")?;
+        Ok(notification)
     }
 
     pub async fn insert_notification(&self, notification: NotificationIssue) -> Result<()> {
@@ -325,7 +337,7 @@ impl Db {
         .bind(notification.last_update_date)
         .execute(&self.conn)
         .await
-        .wrap_err("inserting new notification")?;
+        .context("inserting new notification")?;
         Ok(())
     }
 
@@ -335,7 +347,7 @@ impl Db {
             .bind(issue_number)
             .execute(&self.conn)
             .await
-            .wrap_err("marking notification as closed")?;
+            .context("marking notification as closed")?;
         Ok(())
     }
 
@@ -349,7 +361,7 @@ impl Db {
             .bind(issue_number)
             .execute(&self.conn)
             .await
-            .wrap_err("marking notification as closed")?;
+            .context("marking notification as closed")?;
         Ok(())
     }
 }

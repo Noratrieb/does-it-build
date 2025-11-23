@@ -6,11 +6,8 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use color_eyre::{
-    eyre::{bail, Context},
-    Result,
-};
 use futures::StreamExt;
+use rootcause::{prelude::ResultExt, report};
 use tokio::process::Command;
 use tracing::{debug, error, info};
 
@@ -18,6 +15,7 @@ use crate::{
     db::{BuildMode, Db, FullBuildInfo, Status},
     nightlies::Nightlies,
     notification::GitHubClient,
+    Result,
 };
 
 struct CustomBuildFlags {
@@ -73,11 +71,11 @@ pub async fn background_builder(db: Db, github_client: GitHubClient) -> Result<(
 }
 
 async fn background_builder_inner(db: &Db, github_client: &GitHubClient) -> Result<()> {
-    let nightlies = Nightlies::fetch().await.wrap_err("fetching nightlies")?;
+    let nightlies = Nightlies::fetch().await.context("fetching nightlies")?;
     let already_finished = db
         .finished_nightlies()
         .await
-        .wrap_err("fetching finished nightlies")?;
+        .context("fetching finished nightlies")?;
 
     let next = nightlies.select_latest_to_build(&already_finished);
     match next {
@@ -85,12 +83,12 @@ async fn background_builder_inner(db: &Db, github_client: &GitHubClient) -> Resu
             info!(%nightly, %mode, "Building next nightly");
             let result = build_every_target_for_toolchain(db, &nightly, mode, github_client)
                 .await
-                .wrap_err_with(|| format!("building targets for toolchain {nightly}"));
+                .context_with(|| format!("building targets for toolchain {nightly}"));
             if let Err(err) = result {
                 error!(%nightly, %mode, ?err, "Failed to build nightly");
                 db.finish_nightly_as_broken(&nightly, mode, &format!("{err:?}"))
                     .await
-                    .wrap_err("marking nightly as broken")?;
+                    .context("marking nightly as broken")?;
             }
         }
         None => {
@@ -108,16 +106,16 @@ async fn targets_for_toolchain(toolchain: &Toolchain) -> Result<Vec<String>> {
         .arg("target-list")
         .output()
         .await
-        .wrap_err("failed to spawn rustc")?;
+        .context("failed to spawn rustc")?;
     if !output.status.success() {
-        bail!(
+        return Err(report!(
             "failed to get target-list from rustc: {:?}",
             String::from_utf8(output.stderr)
-        );
+        ));
     }
 
     Ok(String::from_utf8(output.stdout)
-        .wrap_err("rustc target-list is invalid UTF-8")?
+        .context("rustc target-list is invalid UTF-8")?
         .split_whitespace()
         .map(ToOwned::to_owned)
         .collect())
@@ -135,9 +133,12 @@ async fn install_toolchain(toolchain: &Toolchain, mode: BuildMode) -> Result<()>
         .arg("minimal")
         .output()
         .await
-        .wrap_err("failed to spawn rustup")?;
+        .context("failed to spawn rustup")?;
     if !result.status.success() {
-        bail!("rustup failed: {:?}", String::from_utf8(result.stderr));
+        return Err(report!(
+            "rustup failed: {:?}",
+            String::from_utf8(result.stderr)
+        ));
     }
     let result = Command::new("rustup")
         .arg("component")
@@ -147,9 +148,12 @@ async fn install_toolchain(toolchain: &Toolchain, mode: BuildMode) -> Result<()>
         .arg(&toolchain.0)
         .output()
         .await
-        .wrap_err("failed to spawn rustup")?;
+        .context("failed to spawn rustup")?;
     if !result.status.success() {
-        bail!("rustup failed: {:?}", String::from_utf8(result.stderr));
+        return Err(report!(
+            "rustup failed: {:?}",
+            String::from_utf8(result.stderr)
+        ));
     }
 
     Ok(())
@@ -165,12 +169,12 @@ async fn uninstall_toolchain(toolchain: &Toolchain) -> Result<()> {
         .arg(&toolchain.0)
         .output()
         .await
-        .wrap_err("failed to spawn rustup")?;
+        .context("failed to spawn rustup")?;
     if !result.status.success() {
-        bail!(
+        return Err(report!(
             "rustup toolchain remove failed: {:?}",
             String::from_utf8(result.stderr)
-        );
+        ));
     }
     Ok(())
 }
@@ -191,7 +195,7 @@ pub async fn build_every_target_for_toolchain(
 
     let targets = targets_for_toolchain(&toolchain)
         .await
-        .wrap_err("failed to get targets")?;
+        .context("failed to get targets")?;
 
     let results = futures::stream::iter(
         targets
@@ -208,7 +212,7 @@ pub async fn build_every_target_for_toolchain(
     for target in targets {
         build_single_target(db, nightly, &target, mode, github_client)
             .await
-            .wrap_err_with(|| format!("building target {target} for toolchain {toolchain}"))?;
+            .context_with(|| format!("building target {target} for toolchain {toolchain}"))?;
     }
 
     // Mark it as finished, so we never have to build it again.
@@ -230,7 +234,7 @@ async fn build_single_target(
     let existing = db
         .build_status_full(nightly, target, mode)
         .await
-        .wrap_err("getting existing build")?;
+        .context("getting existing build")?;
     if existing.is_some() {
         debug!("Build already exists");
         return Ok(());
@@ -238,13 +242,13 @@ async fn build_single_target(
 
     info!("Building target");
 
-    let tmpdir = tempfile::tempdir().wrap_err("creating temporary directory")?;
+    let tmpdir = tempfile::tempdir().context("creating temporary directory")?;
 
     let start_time = Instant::now();
 
     let result = build_target(tmpdir.path(), &Toolchain::from_nightly(nightly), target)
         .await
-        .wrap_err("running build")?;
+        .context("running build")?;
 
     let full_build_info = FullBuildInfo {
         nightly: nightly.into(),
@@ -298,14 +302,14 @@ async fn build_target(tmpdir: &Path, toolchain: &Toolchain, target: &str) -> Res
         .current_dir(tmpdir)
         .output()
         .await
-        .wrap_err("spawning cargo init")?;
+        .context("spawning cargo init")?;
     if !init.status.success() {
-        bail!("init failed: {}", String::from_utf8(init.stderr)?);
+        return Err(report!("init failed: {}", String::from_utf8(init.stderr)?));
     }
 
     let librs = tmpdir.join("src").join("lib.rs");
     std::fs::write(&librs, "#![no_std]\n")
-        .wrap_err_with(|| format!("writing to {}", librs.display()))?;
+        .context_with(|| format!("writing to {}", librs.display()))?;
 
     async fn run(
         toolchain: &Toolchain,
@@ -330,14 +334,16 @@ async fn build_target(tmpdir: &Path, toolchain: &Toolchain, target: &str) -> Res
             *rustflags = Some(flags);
         }
 
-        cmd.current_dir(tmpdir)
+        let output = cmd
+            .current_dir(tmpdir)
             .output()
             .await
-            .wrap_err("spawning cargo build")
+            .context("spawning cargo build")?;
+        Ok(output)
     }
 
     let mut output = run(toolchain, target, &mut rustflags, tmpdir, "-Zbuild-std").await?;
-    let mut stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
+    let mut stderr = String::from_utf8(output.stderr).context("cargo stderr utf8")?;
 
     let status = if output.status.success() {
         Status::Pass
@@ -352,7 +358,7 @@ async fn build_target(tmpdir: &Path, toolchain: &Toolchain, target: &str) -> Res
             "-Zbuild-std=core",
         )
         .await?;
-        stderr = String::from_utf8(output.stderr).wrap_err("cargo stderr utf8")?;
+        stderr = String::from_utf8(output.stderr).context("cargo stderr utf8")?;
 
         if output.status.success() {
             Status::Pass

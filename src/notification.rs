@@ -1,9 +1,10 @@
-use color_eyre::eyre::{Context, Result};
 use octocrab::models::issues::IssueStateReason;
 use octocrab::models::IssueState;
+use rootcause::prelude::ResultExt;
 use tracing::info;
 
 use crate::db::{Db, FullBuildInfo, NotificationIssue, NotificationStatus, Status};
+use crate::Result;
 
 pub const TABLE_FILE: &str = file!();
 pub const TABLE_LINE: u32 = line!() + 1;
@@ -55,11 +56,11 @@ impl GitHubClient {
             .apps()
             .get_repository_installation(&owner, &repo)
             .await
-            .wrap_err_with(|| format!("getting installation for {owner}/{repo}"))?;
+            .context_with(|| format!("getting installation for {owner}/{repo}"))?;
 
         let client = client
             .installation(installation.id)
-            .wrap_err("getting client for installation")?;
+            .context("getting client for installation")?;
 
         Ok(Self {
             send_pings,
@@ -143,11 +144,11 @@ This update is sent after a month of inactivity.
                     ),
                 )
                 .await
-                .wrap_err("creating update comment")?;
+                .context("creating update comment")?;
 
             db.set_notification_last_update(issue.issue_number, jiff::Timestamp::now())
                 .await
-                .wrap_err("updating last_update_date in DB")?;
+                .context("updating last_update_date in DB")?;
         } else {
             info!("Not sending update for {target}, since not enough time has elapsed since the last one");
         }
@@ -166,9 +167,13 @@ This update is sent after a month of inactivity.
                 .issues()
                 .create_label(target, "d73a4a", format!("Target: {target}"))
                 .await
-                .wrap_err("creating label")?;
+                .context("creating label")?;
         }
-        Err(err) => return Err(err).wrap_err("failed to fetch label label"),
+        Err(err) => {
+            return Err(err)
+                .context("failed to fetch label label")
+                .map_err(Into::into)
+        }
     }
 
     let pings = notify_usernames
@@ -207,7 +212,7 @@ This issue will be closed automatically when this target works again!"
         ))
         .send()
         .await
-        .wrap_err("failed to create issue")?;
+        .context("failed to create issue")?;
 
     db.insert_notification(NotificationIssue {
         first_failed_nightly: nightly.into(),
@@ -217,7 +222,7 @@ This issue will be closed automatically when this target works again!"
         last_update_date: Some(jiff::Timestamp::now().as_millisecond()),
     })
     .await
-    .wrap_err("inserting issue into DB")?;
+    .context("inserting issue into DB")?;
 
     Ok(())
 }
@@ -253,7 +258,7 @@ pub async fn notify_build_pass(
                 thanks for playing this round of Tier 3 rustc target breakage fixing! See y'all next time :3!\n\n<{url}>"),
             )
             .await
-            .wrap_err("creating update comment")?;
+            .context("creating update comment")?;
 
         github_client
             .issues()
@@ -262,7 +267,7 @@ pub async fn notify_build_pass(
             .state_reason(IssueStateReason::Completed)
             .send()
             .await
-            .wrap_err("closing issue")?;
+            .context("closing issue")?;
 
         db.finish_notification(issue.issue_number).await?;
     }

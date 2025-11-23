@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::hash::RandomState;
 
-use color_eyre::eyre::Context;
-use color_eyre::Result;
+use rootcause::prelude::ResultExt;
 use tracing::debug;
 
 use crate::db::{BuildMode, FinishedNightly};
+use crate::Result;
 
 const EARLIEST_CUTOFF_DATE: &str = "2023-01-01";
 
@@ -15,13 +15,21 @@ pub struct Nightlies {
 }
 
 impl Nightlies {
-    pub async fn fetch() -> Result<Nightlies> {
-        let manifests = reqwest::get("https://static.rust-lang.org/manifests.txt")
+    async fn get_body(url: &str) -> Result<String, rootcause::Report> {
+        Ok(reqwest::get(url)
             .await
-            .wrap_err("fetching https://static.rust-lang.org/manifests.txt")?
+            .context("executing GET request")?
             .text()
             .await
-            .wrap_err("fetching body of https://static.rust-lang.org/manifests.txt")?;
+            .context("fetching body")?)
+    }
+
+    pub async fn fetch() -> Result<Nightlies> {
+        let url = "https://static.rust-lang.org/manifests.txt";
+        let manifests = Nightlies::get_body(url)
+            .await
+            .context(format!("Fetching manifests.txt"))
+            .attach(format!("url: {url}"))?;
         let mut all = nightlies_from_manifest(&manifests)
             .into_iter()
             .filter(|date| date.as_str() > EARLIEST_CUTOFF_DATE)
