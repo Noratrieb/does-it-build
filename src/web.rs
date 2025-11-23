@@ -7,13 +7,13 @@ use axum::{
     routing::get,
     Router,
 };
-use color_eyre::{eyre::Context, Result};
+use rootcause::{prelude::ResultExt, Report};
 use serde::Deserialize;
 use tracing::{error, info};
 
 use crate::{
     db::{BuildInfo, BuildMode, BuildStats, Db, Status},
-    notification,
+    notification, Result,
 };
 
 #[derive(Clone)]
@@ -38,7 +38,10 @@ pub async fn webserver(db: Db, notification_repo: String) -> Result<()> {
     info!("Serving website on port 3000 (commit {})", crate::VERSION);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.wrap_err("failed to serve")
+    axum::serve(listener, app)
+        .await
+        .context("failed to serve")?;
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -325,12 +328,10 @@ async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
         Ok(Html(page.render().unwrap()).into_response())
     }
 
-    render(state)
-        .await
-        .unwrap_or_else(|err: color_eyre::eyre::Error| {
-            error!(?err, "Error loading data for root page");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        })
+    render(state).await.unwrap_or_else(|err: Report| {
+        error!(?err, "Error loading data for root page");
+        StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    })
 }
 
 async fn index_css() -> impl IntoResponse {

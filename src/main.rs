@@ -4,12 +4,14 @@ mod nightlies;
 mod notification;
 mod web;
 
-use color_eyre::{eyre::WrapErr, Result};
 use db::Db;
+use rootcause::{prelude::ResultExt, Report};
 use tracing_subscriber::EnvFilter;
 
 const VERSION: &str = env!("GIT_COMMIT");
 const VERSION_SHORT: &str = env!("GIT_COMMIT_SHORT");
+
+type Result<T, E = Report> = std::result::Result<T, E>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -25,25 +27,25 @@ async fn main_inner() -> Result<()> {
     db::MIGRATOR
         .run(&db.conn)
         .await
-        .wrap_err("running migrations")?;
+        .context("running migrations")?;
 
     let send_pings = std::env::var("GITHUB_SEND_PINGS")
         .map(|_| true)
         .unwrap_or(false);
-    let github_owner = std::env::var("GITHUB_OWNER").wrap_err("missing GITHUB_OWNER env var")?;
-    let github_repo = std::env::var("GITHUB_REPO").wrap_err("missing GITHUB_REPO env var")?;
+    let github_owner = std::env::var("GITHUB_OWNER").context("missing GITHUB_OWNER env var")?;
+    let github_repo = std::env::var("GITHUB_REPO").context("missing GITHUB_REPO env var")?;
     let app_id = std::env::var("GITHUB_APP_ID")
-        .wrap_err("missing GITHUB_APP_ID env var")?
+        .context("missing GITHUB_APP_ID env var")?
         .parse::<u64>()
-        .wrap_err("invalid GITHUB_APP_ID")?;
+        .context("invalid GITHUB_APP_ID")?;
     let key = std::env::var("GITHUB_APP_PRIVATE_KEY")
-        .wrap_err("missing GITHUB_APP_PRIVATE_KEY env var")?;
+        .context("missing GITHUB_APP_PRIVATE_KEY env var")?;
     let key = jsonwebtoken::EncodingKey::from_rsa_pem(key.as_bytes()).unwrap();
 
     let github_client = octocrab::Octocrab::builder()
         .app(app_id.into(), key)
         .build()
-        .wrap_err("failed to create client")?;
+        .context("failed to create client")?;
 
     let github_client = notification::GitHubClient::new(
         send_pings,
