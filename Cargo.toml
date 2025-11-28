@@ -31,4 +31,6 @@ tracing = { version = "0.1.40", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
 [build-dependencies]
+bs58 = "0.5.1"
 color-eyre = "0.6.3"
+sha2 = "0.10.9"

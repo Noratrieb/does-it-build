@@ -16,6 +16,10 @@ use crate::{
     notification, Result,
 };
 
+mod revs {
+    include!(concat!(env!("OUT_DIR"), "/revs.rs"));
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub db: Db,
@@ -28,8 +32,8 @@ pub async fn webserver(db: Db, notification_repo: String) -> Result<()> {
         .route("/build", get(web_build))
         .route("/target", get(web_target))
         .route("/nightly", get(web_nightly))
-        .route("/index.css", get(index_css))
-        .route("/index.js", get(index_js))
+        .route(revs::INDEX_CSS_NAME, get(index_css))
+        .route(revs::INDEX_JS_NAME, get(index_js))
         .with_state(AppState {
             db,
             notification_repo,
@@ -334,23 +338,33 @@ async fn web_root(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
-async fn index_css() -> impl IntoResponse {
+fn reply_static(body: &'static str, content_type: &'static str) -> impl IntoResponse {
     (
-        [(
-            axum::http::header::CONTENT_TYPE,
-            axum::http::HeaderValue::from_static("text/css; charset=utf-8"),
-        )],
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static(content_type),
+            ),
+            (
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("public, max-age=31556952, immutable"),
+            ),
+        ],
+        body,
+    )
+}
+
+async fn index_css() -> impl IntoResponse {
+    reply_static(
         include_str!("../static/index.css"),
+        "text/css; charset=utf-8",
     )
 }
 
 async fn index_js() -> impl IntoResponse {
-    (
-        [(
-            axum::http::header::CONTENT_TYPE,
-            axum::http::HeaderValue::from_static("application/javascript; charset=utf-8"),
-        )],
+    reply_static(
         include_str!("../static/index.js"),
+        "application/javascript; charset=utf-8",
     )
 }
 
