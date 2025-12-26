@@ -86,6 +86,19 @@ pub async fn notify_build(
     }
 }
 
+fn should_notify_since_last_notification(
+    last_notification: jiff::Timestamp,
+    now: jiff::Timestamp,
+) -> bool {
+    now.since(last_notification).is_ok_and(|diff| {
+        diff.total((
+            jiff::Unit::Month,
+            &last_notification.to_zoned(jiff::tz::TimeZone::UTC),
+        ))
+        .is_ok_and(|diff_months| diff_months >= 1.0)
+    })
+}
+
 pub async fn notify_build_failure(
     github_client: &GitHubClient,
     db: &Db,
@@ -113,15 +126,7 @@ pub async fn notify_build_failure(
 
         if issue.last_update_date.is_none_or(|last_update_date| {
             jiff::Timestamp::from_millisecond(last_update_date).is_ok_and(|last_update_date| {
-                jiff::Timestamp::now()
-                    .since(last_update_date)
-                    .is_ok_and(|diff| {
-                        diff.total((
-                            jiff::Unit::Month,
-                            &last_update_date.to_zoned(jiff::tz::TimeZone::UTC),
-                        ))
-                        .is_ok_and(|diff_months| diff_months >= 1.0)
-                    })
+                should_notify_since_last_notification(last_update_date, jiff::Timestamp::now())
             })
         }) {
             info!(
@@ -279,4 +284,23 @@ pub async fn notify_build_pass(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn should_notify_since_last_notification() {
+        assert!(super::should_notify_since_last_notification(
+            "2025-11-01T00:00:00Z".parse().unwrap(),
+            "2025-12-02T00:00:00Z".parse().unwrap()
+        ));
+        assert!(super::should_notify_since_last_notification(
+            "2025-09-01T00:00:00Z".parse().unwrap(),
+            "2025-12-02T00:00:00Z".parse().unwrap()
+        ));
+        assert!(!super::should_notify_since_last_notification(
+            "2025-11-02T00:00:00Z".parse().unwrap(),
+            "2025-12-01T00:00:00Z".parse().unwrap()
+        ));
+    }
 }
