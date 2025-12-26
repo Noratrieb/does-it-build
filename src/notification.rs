@@ -115,7 +115,13 @@ pub async fn notify_build_failure(
             jiff::Timestamp::from_millisecond(last_update_date).is_ok_and(|last_update_date| {
                 jiff::Timestamp::now()
                     .since(last_update_date)
-                    .is_ok_and(|diff| diff.get_months() > 0)
+                    .is_ok_and(|diff| {
+                        diff.total((
+                            jiff::Unit::Month,
+                            &last_update_date.to_zoned(jiff::tz::TimeZone::UTC),
+                        ))
+                        .is_ok_and(|diff_months| diff_months >= 1.0)
+                    })
             })
         }) {
             info!(
