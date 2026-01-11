@@ -16,6 +16,7 @@ const TARGET_NOTIFICATIONS: &[(&str, &[&str])] = &[
     ),
     ("aarch64_be-unknown-none-softfloat", &["Gelbpunkt"]),
     ("armv7-sony-vita-newlibeabihf", &["pheki"]),
+    ("armv7-rtems-eabihf", &["thesummer"]),
     ("mips64-unknown-linux-muslabi64", &["Gelbpunkt"]),
     (
         "powerpc64-unknown-linux-musl",
